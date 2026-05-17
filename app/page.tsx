@@ -146,6 +146,7 @@ export default function Home() {
   }, [series, loadData])
 
   const anyLoading = series.some((s) => s.loading)
+  const [showHelp, setShowHelp] = useState(false)
 
   return (
     <div className="flex h-screen bg-gray-950 text-gray-100 overflow-hidden">
@@ -197,6 +198,11 @@ export default function Home() {
           {/* Right: controls */}
           <div className="flex items-center gap-1.5 flex-wrap justify-end">
             <button
+              onClick={() => setShowHelp(true)}
+              className="text-xs px-2 py-1.5 rounded-lg bg-gray-800 border border-gray-700 text-gray-300 hover:border-gray-500 transition-colors whitespace-nowrap">
+              使用說明
+            </button>
+            <button
               onClick={() => setNormalizeAll((v) => !v)}
               className={`text-xs px-2 py-1.5 rounded-lg transition-colors border whitespace-nowrap
                 ${normalizeAll
@@ -223,6 +229,75 @@ export default function Home() {
           <ChartOverlay series={series} normalizeAll={normalizeAll} />
         </div>
       </main>
+
+      {/* Help modal */}
+      {showHelp && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70"
+          onClick={() => setShowHelp(false)}>
+          <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-lg max-h-[85vh] overflow-y-auto shadow-2xl"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-800 sticky top-0 bg-gray-900">
+              <h2 className="text-base font-semibold text-white">使用說明</h2>
+              <button onClick={() => setShowHelp(false)}
+                className="text-gray-500 hover:text-gray-200 text-xl leading-none transition-colors">✕</button>
+            </div>
+            <div className="px-5 py-4 space-y-5 text-sm text-gray-300">
+
+              <p className="text-gray-400 leading-relaxed border-l-2 border-blue-500 pl-3">
+                主要使用：疊加台美股（可看同類族群連動與否）與各大經濟數據疊加
+              </p>
+
+              <section>
+                <h3 className="text-white font-semibold mb-2">新增指標</h3>
+                <ul className="space-y-1.5 text-gray-400">
+                  <li>• 點左上角 ☰ 開啟側欄</li>
+                  <li>• <span className="text-gray-200">預設指標</span>：點分類名稱展開，點指標名稱加入</li>
+                  <li>• <span className="text-gray-200">自訂代碼</span>：
+                    <ul className="ml-4 mt-1 space-y-1">
+                      <li>美股直接輸入代碼，例如 <code className="bg-gray-800 px-1 rounded text-xs">AAPL</code>、<code className="bg-gray-800 px-1 rounded text-xs">TSLA</code></li>
+                      <li>台股輸入四位數字，例如 <code className="bg-gray-800 px-1 rounded text-xs">2330</code>，自動判斷上市/上櫃</li>
+                      <li>指數加 ^，例如 <code className="bg-gray-800 px-1 rounded text-xs">^GSPC</code>（S&P 500）</li>
+                    </ul>
+                  </li>
+                  <li>• <span className="text-gray-200">四則運算</span>：用已加入的指標 ID 組合公式，例如 <code className="bg-gray-800 px-1 rounded text-xs">US10Y - US2Y</code>（長短天期利差）</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 className="text-white font-semibold mb-2">圖表操作</h3>
+                <ul className="space-y-1.5 text-gray-400">
+                  <li>• 滾輪 / 雙指捏合：縮放</li>
+                  <li>• 拖拉：左右平移</li>
+                  <li>• <code className="bg-gray-800 px-1 rounded text-xs">+</code> / <code className="bg-gray-800 px-1 rounded text-xs">−</code> 按鈕：縮放</li>
+                  <li>• 全覽：回到完整時間範圍</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 className="text-white font-semibold mb-2">指標設定</h3>
+                <ul className="space-y-1.5 text-gray-400">
+                  <li>• 色塊：點擊更改顏色</li>
+                  <li>• <code className="bg-gray-800 px-1 rounded text-xs">〰</code> <code className="bg-gray-800 px-1 rounded text-xs">◭</code> <code className="bg-gray-800 px-1 rounded text-xs">▊</code>：切換折線 / 面積 / 長棒圖</li>
+                  <li>• 左軸 / 右軸：切換 Y 軸位置（建議股價左軸、殖利率右軸）</li>
+                  <li>• %變化：改為顯示相對起點的百分比，方便不同單位比較</li>
+                  <li>• 👁 眼睛：隱藏/顯示（資料保留，可用於公式計算）</li>
+                  <li>• × ：刪除指標</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 className="text-white font-semibold mb-2">其他</h3>
+                <ul className="space-y-1.5 text-gray-400">
+                  <li>• 右上角「原始值 / % 變化」：一鍵切換所有指標同步顯示百分比</li>
+                  <li>• 時間範圍：1年 / 2年 / 5年</li>
+                  <li>• 設定自動儲存，重整後恢復上次的指標</li>
+                </ul>
+              </section>
+
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
