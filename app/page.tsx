@@ -17,10 +17,27 @@ function saveSeries(series: SeriesConfig[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(saved))
 }
 
+// Migrate old stooq-format tickers to Yahoo Finance format
+const TICKER_MIGRATION: Record<string, string> = {
+  '^spx': '^GSPC', '^ndx': '^NDX', '^ndq': '^NDX', '^dji': '^DJI',
+  'soxx.us': 'SOXX', 'qqq.us': 'QQQ', 'qqq': 'QQQ',
+}
+
+function migrateSaved(items: SeriesSaved[]): SeriesSaved[] {
+  return items.map((s) => {
+    if (s.type === 'stocks' && s.ticker) {
+      const mapped = TICKER_MIGRATION[s.ticker.toLowerCase()]
+      if (mapped) return { ...s, ticker: mapped }
+    }
+    return s
+  })
+}
+
 function loadSeries(): SeriesSaved[] {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    return raw ? JSON.parse(raw) : []
+    if (!raw) return []
+    return migrateSaved(JSON.parse(raw))
   } catch { return [] }
 }
 
