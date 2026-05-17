@@ -61,10 +61,10 @@ export default function SeriesPanel({
   }
 
   return (
-    <aside className="flex shrink-0 h-full border-r border-gray-800">
+    <aside className="flex shrink-0 h-screen border-r border-gray-800">
 
       {/* ── 左欄：選取指標 ── */}
-      <div className="w-60 bg-gray-900 flex flex-col overflow-y-auto border-r border-gray-800">
+      <div className="w-56 bg-gray-900 flex flex-col overflow-y-auto border-r border-gray-800">
 
         <div className="px-4 pt-4 pb-2">
           <p className="text-xs font-bold text-gray-300 uppercase tracking-wider">選取指標</p>

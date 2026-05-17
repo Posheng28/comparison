@@ -17,7 +17,6 @@ function saveSeries(series: SeriesConfig[]) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(saved))
 }
 
-// Migrate old stooq-format tickers to Yahoo Finance format
 const TICKER_MIGRATION: Record<string, string> = {
   '^spx': '^GSPC', '^ndx': '^NDX', '^ndq': '^NDX', '^dji': '^DJI',
   'soxx.us': 'SOXX', 'qqq.us': 'QQQ', 'qqq': 'QQQ',
@@ -62,21 +61,20 @@ async function fetchSeries(
 }
 
 export default function Home() {
-  const [series, setSeries] = useState<SeriesConfig[]>([])
-  const [range, setRange] = useState<DateRange>(() => {
+  const [series, setSeries]           = useState<SeriesConfig[]>([])
+  const [range, setRange]             = useState<DateRange>(() => {
     if (typeof window === 'undefined') return '2Y'
     return (localStorage.getItem(RANGE_KEY) as DateRange) || '2Y'
   })
   const [normalizeAll, setNormalizeAll] = useState(false)
+  const [sidebarOpen, setSidebarOpen]   = useState(false)
   const hydrated = useRef(false)
 
-  // Save series config whenever it changes (skip initial empty state)
   useEffect(() => {
     if (!hydrated.current) return
     saveSeries(series)
   }, [series])
 
-  // Restore from localStorage on first mount
   useEffect(() => {
     hydrated.current = true
     const saved = loadSeries()
@@ -151,40 +149,67 @@ export default function Home() {
 
   return (
     <div className="flex h-screen bg-gray-950 text-gray-100 overflow-hidden">
-      <SeriesPanel
-        series={series}
-        onAdd={handleAdd}
-        onRemove={handleRemove}
-        onToggleVisible={handleToggleVisible}
-        onToggleAxis={handleToggleAxis}
-        onToggleNormalize={handleToggleNormalize}
-        onColorChange={handleColorChange}
-        onChartTypeChange={handleChartTypeChange}
-      />
 
-      <main className="flex-1 flex flex-col overflow-hidden">
-        <header className="flex items-center justify-between px-6 py-4 border-b border-gray-800 shrink-0">
-          <div className="flex items-center gap-3">
-            <h1 className="text-lg font-semibold text-white">圖表疊加工具</h1>
+      {/* Mobile sidebar overlay backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/60 z-20 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
+      {/* Sidebar — fixed drawer on mobile, static on desktop */}
+      <div className={`
+        fixed inset-y-0 left-0 z-30 flex transition-transform duration-300 ease-in-out
+        lg:static lg:translate-x-0 lg:z-auto
+        ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
+      `}>
+        <SeriesPanel
+          series={series}
+          onAdd={(cfg) => { handleAdd(cfg); setSidebarOpen(false) }}
+          onRemove={handleRemove}
+          onToggleVisible={handleToggleVisible}
+          onToggleAxis={handleToggleAxis}
+          onToggleNormalize={handleToggleNormalize}
+          onColorChange={handleColorChange}
+          onChartTypeChange={handleChartTypeChange}
+        />
+      </div>
+
+      <main className="flex-1 flex flex-col overflow-hidden min-w-0">
+        <header className="flex items-center justify-between px-3 py-2 border-b border-gray-800 shrink-0 gap-2">
+
+          {/* Left: hamburger + title */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={() => setSidebarOpen((v) => !v)}
+              className="lg:hidden w-8 h-8 flex flex-col items-center justify-center gap-1.5 rounded text-gray-400 hover:text-gray-200 hover:bg-gray-800 transition-colors"
+            >
+              <span className="w-5 h-0.5 bg-current rounded" />
+              <span className="w-5 h-0.5 bg-current rounded" />
+              <span className="w-5 h-0.5 bg-current rounded" />
+            </button>
+            <h1 className="text-sm font-semibold text-white whitespace-nowrap">圖表疊加工具</h1>
             {anyLoading && <span className="text-xs text-gray-400 animate-pulse">載入中…</span>}
           </div>
 
-          <div className="flex items-center gap-3">
+          {/* Right: controls */}
+          <div className="flex items-center gap-1.5 flex-wrap justify-end">
             <button
               onClick={() => setNormalizeAll((v) => !v)}
-              className={`text-sm px-3 py-1.5 rounded-lg transition-colors border
+              className={`text-xs px-2 py-1.5 rounded-lg transition-colors border whitespace-nowrap
                 ${normalizeAll
                   ? 'bg-green-700/40 border-green-600 text-green-300'
                   : 'bg-gray-800 border-gray-700 text-gray-300 hover:border-gray-600'}`}
             >
-              {normalizeAll ? '% 相對變化' : '原始數值'}
+              {normalizeAll ? '% 變化' : '原始值'}
             </button>
 
             <div className="flex gap-1">
               {(Object.keys(DATE_RANGE_LABELS) as DateRange[]).map((r) => (
                 <button key={r} onClick={() => handleRangeChange(r)}
-                  className={`text-sm px-3 py-1.5 rounded-lg transition-colors
-                    ${range === r ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700 hover:text-gray-200'}`}
+                  className={`text-xs px-2.5 py-1.5 rounded-lg transition-colors whitespace-nowrap
+                    ${range === r ? 'bg-blue-600 text-white' : 'bg-gray-800 text-gray-400 hover:bg-gray-700'}`}
                 >
                   {DATE_RANGE_LABELS[r]}
                 </button>
@@ -193,7 +218,7 @@ export default function Home() {
           </div>
         </header>
 
-        <div className="flex-1 p-6 min-h-0">
+        <div className="flex-1 p-2 min-h-0">
           <ChartOverlay series={series} normalizeAll={normalizeAll} />
         </div>
       </main>
