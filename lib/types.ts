@@ -94,9 +94,6 @@ export const PRESET_GROUPS: PresetGroup[] = [
   },
 ]
 
-// Flat list for backward compatibility
-export const PRESET_SERIES: PresetItem[] = PRESET_GROUPS.flatMap((g) => g.items)
-
 export const DATE_RANGE_LABELS: Record<DateRange, string> = {
   '1Y': '1年', '2Y': '2年', '5Y': '5年',
 }
