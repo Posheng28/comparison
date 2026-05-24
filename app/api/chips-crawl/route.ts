@@ -7,8 +7,24 @@ import { saveLegal, loadProgress, saveProgress } from '@/lib/legalStore'
 // 反覆呼叫直到 remaining=0；每週 opendata 換週時自動重置續爬。
 
 const OPENDATA = 'https://opendata.tdcc.com.tw/getOD.ashx?id=1-5'
+const KEEP_WEEKS = 52
 const sleep = (ms: number) => new Promise(r => setTimeout(r, ms))
 const dash = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+const weekKey = (ymd: string) => Math.floor(Date.UTC(+ymd.slice(0, 4), +ymd.slice(4, 6) - 1, +ymd.slice(6, 8)) / (7 * 86400000))
+
+// DJ 每日資料 → 每週一點（取該週最後一日），只留最新 KEEP_WEEKS 週（滾動，最舊自動丟）
+function weekly(daily: Record<string, [number, number]>): Record<string, [number, number]> {
+  const byWeek = new Map<number, { date: string; v: [number, number] }>()
+  for (const [d, v] of Object.entries(daily)) {
+    const wk = weekKey(d)
+    const cur = byWeek.get(wk)
+    if (!cur || d > cur.date) byWeek.set(wk, { date: d, v })
+  }
+  const last = [...byWeek.values()].sort((a, b) => (a.date < b.date ? -1 : 1)).slice(-KEEP_WEEKS)
+  const out: Record<string, [number, number]> = {}
+  for (const e of last) out[e.date] = e.v
+  return out
+}
 
 // 全市場代號 + 最新週（快取 6h）
 let codeCache: { at: number; week: string; codes: string[] } | null = null
@@ -41,12 +57,13 @@ export async function GET(req: NextRequest) {
     const todo = codes.filter(c => !doneSet.has(c)).slice(0, n)
 
     const to = new Date()
-    const from = new Date(); from.setDate(from.getDate() - 75) // 近 ~10 週
+    const from = new Date(); from.setDate(from.getDate() - 7 * (KEEP_WEEKS + 2)) // 抓滿 ~52 週
     let ok = 0, fail = 0
     for (const code of todo) {
       try {
         const map = await fetchDJLegal(code, dash(from), dash(to))
-        if (Object.keys(map).length) { await saveLegal(code, map); ok++ } else fail++
+        const wk = weekly(map) // 收斂每週一點、滾動保留最新 52 週
+        if (Object.keys(wk).length) { await saveLegal(code, wk); ok++ } else fail++
       } catch { fail++ }
       prog.done.push(code)
       await sleep(300) // 禮貌延遲
