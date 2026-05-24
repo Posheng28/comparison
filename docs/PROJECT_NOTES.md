@@ -6,10 +6,11 @@
 ## 專案概觀
 
 台股圖表比較工具（Next.js 16 App Router + TypeScript + Tailwind，dev: `npm run dev` → http://localhost:3000）。
-三個模式（`app/page.tsx` 的 `mode`）：
+四個模式（`app/page.tsx` 的 `mode`）：
 - `overlay`：多檔疊加比較（`SeriesPanel` + `ChartOverlay`）
 - `period`：時段比較，起點對齊（`PeriodPanel` + `PeriodChart`）
-- `disposal`：**台股注意/處置推演**（`DisposalTool`）← 本輪主要開發
+- `disposal`：**台股注意/處置推演**（`DisposalTool`）
+- `chips`：**集保大戶 / 內部大戶籌碼**（`ChipsView` 個股趨勢 + `ChipsScreener` 篩選排行）← 見第六節
 
 ---
 
@@ -142,19 +143,27 @@
 ## 四、檔案地圖
 
 ```
-app/page.tsx                  三模式切換（overlay/period/disposal）
+app/page.tsx                  四模式切換（overlay/period/disposal/chips）
 components/
   DisposalTool.tsx            注意/處置推演（核心，~1100 行）
   PeriodPanel.tsx             時段比較側欄（年份+歷史）
   SeriesPanel/ChartOverlay/PeriodPanel/PeriodChart   疊加與時段圖
+  ChipsView.tsx               籌碼-個股大戶趨勢（自訂張數區間、逐週扣三大法人）
+  ChipsScreener.tsx           籌碼-篩選排行（大戶/內部大戶 top50、lazy 自動爬）
 app/api/
-  stocks/                     Yahoo + TWSE/TPEx 補抓股價，回 market
-  notices/                    注意紀錄
-  disposal/                   單股處置（punish/disposal）
-  disposal-list/              全市場處置清單
+  stocks/                     Yahoo + TWSE/TPEx 補抓股價，回 market（含 volume）
+  notices/ disposal/ disposal-list/   注意/處置紀錄
   market-avg/                 全體累積漲幅平均（款一差幅 ≥ 20% 基底）
+  chips/                      單股 TDCC 集保級距週歷史（on-demand 爬 qryStock）
+  foreign/                    單股逐週三大法人持股%（DJ，via lib/dj）
+  chips-rank/                 全市場大戶/內部大戶排行（opendata + legalStore）
+  chips-crawl/                背景漸進爬 DJ 三大法人（種子/維護/去重）
 lib/cache.ts                  記憶體快取（getCached/setCached/deleteCachePrefix）
-lib/marketStore.ts            全市場每日漲跌幅快照（磁碟+記憶體 fallback，留 6 交易日）
+lib/marketStore.ts            全市場每日漲跌幅快照（留 6 交易日）
+lib/chipsStore.ts             單股 TDCC 級距週資料（per-ticker）
+lib/rankStore.ts              全市場大戶佔比每週快照（opendata）
+lib/legalStore.ts             全市場三大法人持股 per-stock 週資料（DJ，留 52 週）+ 爬取進度
+lib/dj.ts                     DJ 法人持股明細抓取（big5、上市櫃通吃）
 docs/PROJECT_NOTES.md         （本檔）
 ```
 
@@ -164,3 +173,47 @@ docs/PROJECT_NOTES.md         （本檔）
 - FL007225（公布注意交易資訊暨處置作業要點）、FL007226（注意標準附表）
 - 上市標準：twse-regulation.twse.com.tw；上櫃標準：證券櫃買中心（用戶提供 PDF）
 - 上市/上櫃**數字不同**（如上表），務必依市場別套用。
+
+---
+
+## 六、籌碼 / 大戶（chips 模式）
+
+目標：看「集保大戶持股集中度」與「**內部大戶 = 大戶 − 三大法人**」的趨勢與全市場排行（仿 CMoney 內部大戶 APP，不做財報篩選/社團）。
+
+### 概念與級距
+- **大戶**：集保戶股權分散表中持股達門檻的級距佔比。門檻**只能對齊集保級距邊界**（張）：`50/100/200/400/600/800/1000`。
+- 級距 index(0-14) → ≥張數下界 `tierLots = [0,1,5,10,15,20,30,40,50,100,200,400,600,800,1000]`。≥X張 = 從該級距加總到 tier15。常用：≥400張=級距12-15、≥1000張=級距15。
+- **內部大戶 = 大戶佔比 − 三大法人持股比重%**（扣掉法人才是「非法人大戶」）。
+
+### 資料源（關鍵）
+| 用途 | 來源 | 範圍 |
+|------|------|------|
+| 單股大戶級距週歷史 | TDCC 個股查詢 `qryStock`（POST，Struts **SYNCHRONIZER_TOKEN** 一次性、**token 鏈**、cookie；`firDate`=最新日不是查詢週） | 約 1 年 |
+| 全市場大戶（最新週） | TDCC opendata `getOD.ashx?id=1-5`（一次回全市場 ~3900 檔 × 17 級距，欄位：日期,代號,分級,人數,股數,佔比%） | 僅最新一週 |
+| 三大法人持股比重% | **DJ**（富邦/嘉實）`zcl.djhtm?a=代號&c=起&d=迄`（**big5**、伺服器渲染、上市櫃通吃，明細表末兩欄=外資%、三大法人%；投信/自營為估算） | 約 1 年每日 |
+| 外資官方（備用） | 上市 MI_QFIIS、上櫃 OpenAPI `tpex_3insti_qfii`（⚠️ MI_QFIIS `row[6]`=**尚可投資比率非持股**，持股要 `(發行−尚可)/發行`，已改用 DJ） | — |
+| 全市場三大法人買賣超週報（維護用） | 上市 `TWT54U?date=週起&dymd=週迄&selectType=ALLBUT0999`（1335 檔）；上櫃週報端點未接 | 每週 |
+
+### 內部大戶爬蟲策略（`chips-crawl` + `legalStore`）
+- **DJ 逐檔**（一個來源就給完整三大法人，省掉外資/投信/自營分開接）。背景漸進、禮貌延遲 300ms、可中斷續爬（`_progress.json`，換週自動重置）。
+- **三層省抓**：①已含本週→**跳過不抓**（dedup）；②有舊資料→**只抓近 3 週**合併進既有；③全新股→才抓滿 ~52 週（種子）。
+- **52 週滾動**：DJ 每日 → 收斂每週一點（該週最後一日）→ 只留最新 52 週，新進舊出。
+- **lazy 自動**：開「篩選排行→內部大戶」時前端自動分批呼叫 `chips-crawl` 補齊本週並顯示進度；新週自動重爬。**無排程器**、本機/雲端通用。
+
+### 資料時間 / 對齊（重要，別貼錯週）
+- **一律用資料源自己的日期欄位當週次**，不要用「今天」推。
+- 延遲 ≈「最新可得 = 上一個完成的週五」（週五資料約週一到位），**非整整一週**。opendata 與 DJ 通常都對齊到同一個上週五。
+- **同週相減**：`chips-rank` 的 `legalAt()` 把三大法人錨定到「≤ opendata 週」最近一筆 → 兩源更新時間差也不混週。
+
+### 排行（`chips-rank`）
+- `?net=1` = 內部大戶（大戶 − 三大法人，只列已爬到三大法人的股）；否則原始大戶。`?lots=400|1000`、`?sort=level|d1`、`limit` 預設 100、UI 取 **top 50**。
+- **週對週增減**：opendata 大戶每週累積（rankStore）+ DJ 三大法人歷史 → 第 2 個 opendata 週後自動長出。
+
+### 踩雷
+- **勿在 server 執行中 `rm .legaldata`**：store 的 `ensureDisk` 快取了「目錄存在」，刪目錄後 mkdir 不再執行 → 寫檔靜默失敗。要重置請重建目錄或重啟 dev server。
+- DJ 是第三方、big5、格式可能改版 → 會需要修 `lib/dj.ts`。投信/自營是 DJ 估算、持股比重以**佔已發行**計（與集保庫存略差），UI 已標。
+- TDCC `qryStock` 的 token 一次性：每次 POST 從回應頁抓新 token 給下一週（鏈式）。
+
+### 待辦（之後）
+- 週報買賣超維護匯入器（取代維護期的 DJ 抓取，更省）：缺上櫃週報端點 + 需發行股數換算（買賣超→%）+ 除權息漂移處理。
+- 篩選器的「內部大戶」需全市場三大法人爬完才完整（背景漸進中）。
