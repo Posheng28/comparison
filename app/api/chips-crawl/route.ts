@@ -48,7 +48,7 @@ async function getCodes(): Promise<{ week: string; codes: string[] }> {
 }
 
 export async function GET(req: NextRequest) {
-  const n = Math.min(Math.max(parseInt(new URL(req.url).searchParams.get('n') || '25'), 1), 80)
+  const n = Math.min(Math.max(parseInt(new URL(req.url).searchParams.get('n') || '25'), 0), 80) // n=0 → 只回進度
   try {
     const { week, codes } = await getCodes()
     let prog = await loadProgress()

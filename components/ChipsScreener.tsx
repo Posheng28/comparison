@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 
 // 全市場大戶佔比排行（籌碼篩選器）。資料來自 /api/chips-rank（TDCC opendata 最新週）。
 // 近1週增減需累積 ≥2 週快照才會出現（accumulate-forward）；2/3 週增減隨週數長出。
@@ -29,6 +29,32 @@ export default function ChipsScreener() {
 
   useEffect(() => { load() }, [load])
 
+  // lazy 自動：進入「內部大戶」模式時，自動分批把本週三大法人補齊（新週爬蟲會自動重置重爬）
+  const [crawl, setCrawl] = useState<{ done: number; total: number; remaining: number } | null>(null)
+  const crawlingRef = useRef(false)
+  useEffect(() => {
+    if (!net) { setCrawl(null); return }
+    if (crawlingRef.current) return
+    let cancelled = false
+    crawlingRef.current = true
+    ;(async () => {
+      try {
+        let p = await (await fetch('/api/chips-crawl?n=0')).json()
+        if (!cancelled) setCrawl(p)
+        while (!cancelled && p.remaining > 0) {
+          p = await (await fetch('/api/chips-crawl?n=40')).json()
+          if (cancelled) break
+          setCrawl(p)
+          await load() // 邊爬邊刷新排行
+          await new Promise(r => setTimeout(r, 400))
+        }
+      } catch { /* ignore */ }
+      finally { crawlingRef.current = false }
+    })()
+    return () => { cancelled = true }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [net])
+
   const fmtDate = (d?: string | null) => d ? `${d.slice(4, 6)}/${d.slice(6)}` : '—'
 
   return (
@@ -56,6 +82,12 @@ export default function ChipsScreener() {
         </div>
         {loading && <span className="text-gray-400 animate-pulse">載入中…</span>}
         {error && <span className="text-red-400">{error}</span>}
+        {net && crawl && crawl.remaining > 0 && (
+          <span className="text-amber-400/90 animate-pulse">三大法人自動更新中 {crawl.done}/{crawl.total}（剩 {crawl.remaining}）…</span>
+        )}
+        {net && crawl && crawl.remaining === 0 && (
+          <span className="text-green-500/80">三大法人已更新 {crawl.total} 檔 ✓</span>
+        )}
       </div>
 
       {data && !data.hasDelta && (
