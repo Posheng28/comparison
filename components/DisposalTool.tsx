@@ -830,6 +830,12 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
         const dispPrice       = isUnset ? (i === 0 ? startPrice : (simPrices[i-1] ?? startPrice)) : chosen
         const nl              = isUnset ? null : nLvl(chosen, d.bp, market)
         const pctChg          = ((dispPrice - d.bp) / d.bp * 100).toFixed(1)
+        // 日內漲幅 = 對比昨日收盤（即前一張卡的價格）
+        const prevClose       = i === 0 ? startPrice : (simPrices[i-1] ?? startPrice)
+        const dod             = (dispPrice - prevClose) / prevClose * 100
+        const dodAbs          = dispPrice - prevClose
+        const dodArrow        = dod > 0 ? '▲' : dod < 0 ? '▼' : ''
+        const dodColor        = dod > 0 ? '#f87171' : dod < 0 ? '#4ade80' : '#9ca3af'  // 台股慣例：紅漲綠跌
         const isTriggered     = simResult?.disposed && simResult.trigIdx === i
 
         const borderCls = isTriggered ? 'border-red-600 bg-red-950/30'
@@ -855,17 +861,24 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
               </span>
             </div>
 
-            <input
-              type="number"
-              value={editStr[i] !== undefined ? editStr[i] : (isUnset ? fNum(dispPrice) : fNum(chosen!))}
-              step={tickOf(dispPrice)} min={minP} max={maxP} disabled={prevUnset}
-              onFocus={() => onNumFocus(i)}
-              onChange={e => onNumChange(i, e.target.value)}
-              onBlur={() => onNumBlur(i)}
-              onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
-              className="w-full text-center text-2xl font-extrabold bg-transparent border-b-2 border-transparent focus:outline-none focus:border-blue-500 focus:bg-blue-950/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              style={{ color: col }}
-            />
+            <div className="flex items-baseline gap-1.5">
+              <input
+                type="number"
+                value={editStr[i] !== undefined ? editStr[i] : (isUnset ? fNum(dispPrice) : fNum(chosen!))}
+                step={tickOf(dispPrice)} min={minP} max={maxP} disabled={prevUnset}
+                onFocus={() => onNumFocus(i)}
+                onChange={e => onNumChange(i, e.target.value)}
+                onBlur={() => onNumBlur(i)}
+                onKeyDown={e => { if (e.key === 'Enter') (e.target as HTMLInputElement).blur() }}
+                className="flex-1 min-w-0 text-right text-2xl font-extrabold bg-transparent border-b-2 border-transparent focus:outline-none focus:border-blue-500 focus:bg-blue-950/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                style={{ color: col }}
+              />
+              {!isUnset && (
+                <span className="shrink-0 text-xs font-bold leading-tight" style={{ color: dodColor }}>
+                  {dodArrow}{fNum(Math.abs(dodAbs))} ({Math.abs(dod).toFixed(2)}%)
+                </span>
+              )}
+            </div>
 
             <div className="text-xs font-medium" style={{ color: col }}>
               {isUnset ? '' : `vs基準 ${parseFloat(pctChg) > 0 ? '+' : ''}${pctChg}%`}
