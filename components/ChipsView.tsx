@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
-import { createChart, LineSeries, IChartApi, ISeriesApi, Time } from 'lightweight-charts'
+import { createChart, LineSeries, HistogramSeries, IChartApi, ISeriesApi, Time } from 'lightweight-charts'
 
 // 集保大戶佔比趨勢（內部大戶概念）。資料來自 /api/chips（TDCC 15 級距週資料）。
 // 可自訂「價格區間 → 幾張算大戶」(可加區間)，依股價挑門檻；門檻對齊集保級距邊界。
@@ -38,6 +38,7 @@ export default function ChipsView() {
   const [price, setPrice]     = useState<number | null>(null)
   const [foreignByDate, setForeignByDate] = useState<Record<string, number | null>>({}) // 逐週外資持股%
   const [legalByDate, setLegalByDate]     = useState<Record<string, number | null>>({}) // 逐週三大法人持股%
+  const [legalSharesByDate, setLegalSharesByDate] = useState<Record<string, number | null>>({}) // 逐週三大法人持股(張)
   const [subLegal, setSubLegal] = useState(true)                    // 是否扣三大法人
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
@@ -51,12 +52,15 @@ export default function ChipsView() {
   const containerRef = useRef<HTMLDivElement>(null)
   const chartRef     = useRef<IChartApi | null>(null)
   const seriesRef    = useRef<ISeriesApi<'Line'> | null>(null)
+  const barContainerRef = useRef<HTMLDivElement>(null)
+  const barChartRef     = useRef<IChartApi | null>(null)
+  const barSeriesRef    = useRef<ISeriesApi<'Histogram'> | null>(null)
 
   // 查詢：抓 chips + 股價
   const query = useCallback(async (raw: string) => {
     const code = raw.trim()
     if (!/^\d{4}$/.test(code)) { setError('請輸入 4 位數台股代號'); return }
-    setLoading(true); setError(null); setForeignByDate({}); setLegalByDate({})
+    setLoading(true); setError(null); setForeignByDate({}); setLegalByDate({}); setLegalSharesByDate({})
     try {
       const [cRes, sRes] = await Promise.all([
         fetch(`/api/chips?ticker=${code}`),
@@ -75,8 +79,8 @@ export default function ChipsView() {
       if (dates.length) {
         try {
           const fJson = await (await fetch(`/api/foreign?ticker=${code}&dates=${dates.join(',')}`)).json()
-          setForeignByDate(fJson.foreign ?? {}); setLegalByDate(fJson.legal ?? {})
-        } catch { setForeignByDate({}); setLegalByDate({}) }
+          setForeignByDate(fJson.foreign ?? {}); setLegalByDate(fJson.legal ?? {}); setLegalSharesByDate(fJson.legalShares ?? {})
+        } catch { setForeignByDate({}); setLegalByDate({}); setLegalSharesByDate({}) }
       }
     } catch {
       setError('查詢失敗，請稍後再試')
@@ -98,7 +102,30 @@ export default function ChipsView() {
     seriesRef.current = chart.addSeries(LineSeries, { color: '#fbbf24', lineWidth: 2, priceFormat: { type: 'custom', minMove: 0.01, formatter: (v: number) => `${v.toFixed(2)}%` } })
     const ro = new ResizeObserver(([e]) => chart.applyOptions({ width: e.contentRect.width, height: e.contentRect.height }))
     ro.observe(containerRef.current)
-    return () => { ro.disconnect(); chart.remove(); chartRef.current = null; seriesRef.current = null }
+
+    // 底部柱狀圖：三大法人持股（張），數字走左軸
+    let barRo: ResizeObserver | null = null
+    if (barContainerRef.current) {
+      const bar = createChart(barContainerRef.current, {
+        width: barContainerRef.current.clientWidth, height: barContainerRef.current.clientHeight,
+        layout: { background: { color: '#030712' }, textColor: '#9ca3af', fontFamily: 'system-ui, sans-serif', fontSize: 11 },
+        grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } },
+        timeScale: { borderColor: '#374151', timeVisible: false },
+        leftPriceScale: { borderColor: '#374151', visible: true },   // 數字在左軸
+        rightPriceScale: { visible: false },
+      })
+      barChartRef.current = bar
+      barSeriesRef.current = bar.addSeries(HistogramSeries, {
+        color: '#38bdf8', priceScaleId: 'left',
+        priceFormat: { type: 'custom', minMove: 1, formatter: (v: number) => `${Math.round(v).toLocaleString()}張` },
+      })
+      barRo = new ResizeObserver(([e]) => bar.applyOptions({ width: e.contentRect.width, height: e.contentRect.height }))
+      barRo.observe(barContainerRef.current)
+    }
+    return () => {
+      ro.disconnect(); chart.remove(); chartRef.current = null; seriesRef.current = null
+      barRo?.disconnect(); barChartRef.current?.remove(); barChartRef.current = null; barSeriesRef.current = null
+    }
   }, [])
 
   // 依資料 + 門檻 + 逐週扣外資 重繪
@@ -114,7 +141,15 @@ export default function ChipsView() {
     if (!s || !data) return
     s.setData(data.series.map(w => ({ time: ymd(w.date) as Time, value: effPct(w) })))
     chartRef.current?.timeScale().fitContent()
-  }, [data, effPct])
+    // 底部柱圖：三大法人持股(張)
+    const bs = barSeriesRef.current
+    if (bs) {
+      bs.setData(data.series
+        .filter(w => legalSharesByDate[w.date] != null)
+        .map(w => ({ time: ymd(w.date) as Time, value: legalSharesByDate[w.date] as number })))
+      barChartRef.current?.timeScale().fitContent()
+    }
+  }, [data, effPct, legalSharesByDate])
 
   // 統計：最新 + 週對週（扣外資後）
   const series = data?.series ?? []
@@ -196,15 +231,21 @@ export default function ChipsView() {
         </div>
       )}
 
-      {/* 趨勢圖 */}
-      <div className="flex-1 min-h-[300px] relative">
-        {!data && !loading && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 text-sm gap-2 pointer-events-none">
-            <span>輸入股號查詢大戶持股趨勢</span>
-            <span className="text-xs text-gray-600">資料來自集保戶股權分散表（每週五更新），首次查詢會即時爬取約 1 年週資料</span>
-          </div>
-        )}
-        <div ref={containerRef} className="w-full h-full" />
+      {/* 趨勢圖（上：內部大戶佔比線；下：三大法人持股張數柱，左軸） */}
+      <div className="flex-1 min-h-[360px] flex flex-col">
+        <div className="relative flex-[2] min-h-[200px]">
+          {!data && !loading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500 text-sm gap-2 pointer-events-none">
+              <span>輸入股號查詢大戶持股趨勢</span>
+              <span className="text-xs text-gray-600">資料來自集保戶股權分散表（每週五更新），首次查詢會即時爬取約 1 年週資料</span>
+            </div>
+          )}
+          <div ref={containerRef} className="w-full h-full" />
+        </div>
+        <div className="flex-1 min-h-[120px] relative border-t border-gray-800">
+          {data && <span className="absolute top-1 left-2 z-10 text-xs text-sky-400/80 pointer-events-none">三大法人持股（張）</span>}
+          <div ref={barContainerRef} className="w-full h-full" />
+        </div>
       </div>
     </div>
   )
