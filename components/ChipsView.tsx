@@ -36,8 +36,9 @@ export default function ChipsView() {
   const [input, setInput]     = useState('')
   const [data, setData]       = useState<ChipsResp | null>(null)
   const [price, setPrice]     = useState<number | null>(null)
-  const [foreignByDate, setForeignByDate] = useState<Record<string, number | null>>({}) // 逐週外資持股%（官方）
-  const [subForeign, setSubForeign] = useState(true)                // 是否扣外資
+  const [foreignByDate, setForeignByDate] = useState<Record<string, number | null>>({}) // 逐週外資持股%
+  const [legalByDate, setLegalByDate]     = useState<Record<string, number | null>>({}) // 逐週三大法人持股%
+  const [subLegal, setSubLegal] = useState(true)                    // 是否扣三大法人
   const [loading, setLoading] = useState(false)
   const [error, setError]     = useState<string | null>(null)
   const [bands, setBands]     = useState<Band[]>(() => {
@@ -55,7 +56,7 @@ export default function ChipsView() {
   const query = useCallback(async (raw: string) => {
     const code = raw.trim()
     if (!/^\d{4}$/.test(code)) { setError('請輸入 4 位數台股代號'); return }
-    setLoading(true); setError(null); setForeignByDate({})
+    setLoading(true); setError(null); setForeignByDate({}); setLegalByDate({})
     try {
       const [cRes, sRes] = await Promise.all([
         fetch(`/api/chips?ticker=${code}`),
@@ -64,18 +65,18 @@ export default function ChipsView() {
       const cJson = await cRes.json()
       if (cJson.error) { setError(cJson.error); setData(null); return }
       setData(cJson)
-      let mkt = 'TWSE'
       try {
         const sJson = await sRes.json()
-        if (sJson.market === 'TPEx' || sJson.market === 'TWSE') mkt = sJson.market
         const arr = sJson.data as { value: number }[] | undefined
         setPrice(arr && arr.length ? arr[arr.length - 1].value : null)
       } catch { setPrice(null) }
-      // 外資持股%：上市逐週(MI_QFIIS)、上櫃最新值套各週(tpex_3insti_qfii)
+      // 逐週三大法人持股%（DJ：外資官方近似 + 投信/自營估算，上市櫃通吃）
       const dates = (cJson.series ?? []).map((w: { date: string }) => w.date)
       if (dates.length) {
-        try { const fJson = await (await fetch(`/api/foreign?ticker=${code}&market=${mkt}&dates=${dates.join(',')}`)).json(); setForeignByDate(fJson.foreign ?? {}) }
-        catch { setForeignByDate({}) }
+        try {
+          const fJson = await (await fetch(`/api/foreign?ticker=${code}&dates=${dates.join(',')}`)).json()
+          setForeignByDate(fJson.foreign ?? {}); setLegalByDate(fJson.legal ?? {})
+        } catch { setForeignByDate({}); setLegalByDate({}) }
       }
     } catch {
       setError('查詢失敗，請稍後再試')
@@ -104,9 +105,9 @@ export default function ChipsView() {
   const activeLots = price != null ? pickLots(bands, price) : bands[bands.length - 1]?.lots ?? 400
   const effPct = useCallback((w: { date: string; tiers: number[] }): number => {
     const big = bigHolderPct(w.tiers, data!.tierLots, activeLots)
-    const f = subForeign ? (foreignByDate[w.date] ?? 0) : 0
-    return +(big - f).toFixed(2)
-  }, [data, activeLots, subForeign, foreignByDate])
+    const sub = subLegal ? (legalByDate[w.date] ?? 0) : 0
+    return +(big - sub).toFixed(2)
+  }, [data, activeLots, subLegal, legalByDate])
 
   useEffect(() => {
     const s = seriesRef.current
@@ -120,7 +121,9 @@ export default function ChipsView() {
   const latestPct = series.length ? effPct(series[series.length - 1]) : null
   const prevPct   = series.length > 1 ? effPct(series[series.length - 2]) : null
   const wow = latestPct != null && prevPct != null ? +(latestPct - prevPct).toFixed(2) : null
-  const latestForeign = series.length ? foreignByDate[series[series.length - 1].date] : null
+  const lastDate = series.length ? series[series.length - 1].date : null
+  const latestForeign = lastDate ? foreignByDate[lastDate] : null
+  const latestLegal   = lastDate ? legalByDate[lastDate] : null
 
   const setBand = (i: number, patch: Partial<Band>) => setBands(bs => bs.map((b, j) => j === i ? { ...b, ...patch } : b))
   const addBand = () => setBands(bs => {
@@ -178,18 +181,18 @@ export default function ChipsView() {
       {/* 統計 + 扣外資 */}
       {latestPct != null && (
         <div className="flex items-center gap-x-6 gap-y-1.5 text-sm flex-wrap">
-          <span className="text-gray-400">最新{subForeign && latestForeign != null ? '內部' : ''}大戶佔比 <b className="text-amber-300 text-lg">{latestPct}%</b></span>
+          <span className="text-gray-400">最新{subLegal && latestLegal != null ? '內部' : ''}大戶佔比 <b className="text-amber-300 text-lg">{latestPct}%</b></span>
           {wow != null && (
             <span className="text-gray-400">週對週 <b style={{ color: wow > 0 ? '#f87171' : wow < 0 ? '#4ade80' : '#9ca3af' }}>{wow > 0 ? '+' : ''}{wow}%</b></span>
           )}
           <label className="flex items-center gap-1.5 cursor-pointer">
-            <input type="checkbox" checked={subForeign} onChange={e => setSubForeign(e.target.checked)} className="accent-amber-500" />
-            <span className="text-gray-300">扣外資（逐週·官方）</span>
-            {latestForeign != null
-              ? <span className="text-gray-500">最新 {latestForeign}%</span>
-              : <span className="text-gray-600">（上櫃/查無，未扣）</span>}
+            <input type="checkbox" checked={subLegal} onChange={e => setSubLegal(e.target.checked)} className="accent-amber-500" />
+            <span className="text-gray-300">扣三大法人（逐週）</span>
+            {latestLegal != null
+              ? <span className="text-gray-500">最新 {latestLegal}%（外資 {latestForeign ?? '—'}%）</span>
+              : <span className="text-gray-600">（查無，未扣）</span>}
           </label>
-          <span className="text-xs text-gray-600">※ 投信/自營為估算、暫未扣（之後補）</span>
+          <span className="text-xs text-gray-600">※ 投信/自營為 DJ 估算值；持股比重以佔已發行計（與集保庫存略有差異）</span>
         </div>
       )}
 
