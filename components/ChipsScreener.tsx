@@ -19,7 +19,7 @@ export default function ChipsScreener() {
   const load = useCallback(async () => {
     setLoading(true); setError(null)
     try {
-      const r = await fetch(`/api/chips-rank?lots=${lots}&sort=${sort}&limit=100${net ? '&net=1' : ''}`)
+      const r = await fetch(`/api/chips-rank?lots=${lots}&sort=${sort}&limit=50${net ? '&net=1' : ''}`)
       const j = await r.json()
       if (j.error) setError(j.error)
       else setData(j)
