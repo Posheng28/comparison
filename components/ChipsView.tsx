@@ -64,15 +64,17 @@ export default function ChipsView() {
       const cJson = await cRes.json()
       if (cJson.error) { setError(cJson.error); setData(null); return }
       setData(cJson)
+      let mkt = 'TWSE'
       try {
         const sJson = await sRes.json()
+        if (sJson.market === 'TPEx' || sJson.market === 'TWSE') mkt = sJson.market
         const arr = sJson.data as { value: number }[] | undefined
         setPrice(arr && arr.length ? arr[arr.length - 1].value : null)
       } catch { setPrice(null) }
-      // 逐週外資持股%（官方 MI_QFIIS，全市場 per-date 快取）
+      // 外資持股%：上市逐週(MI_QFIIS)、上櫃最新值套各週(tpex_3insti_qfii)
       const dates = (cJson.series ?? []).map((w: { date: string }) => w.date)
       if (dates.length) {
-        try { const fJson = await (await fetch(`/api/foreign?ticker=${code}&dates=${dates.join(',')}`)).json(); setForeignByDate(fJson.foreign ?? {}) }
+        try { const fJson = await (await fetch(`/api/foreign?ticker=${code}&market=${mkt}&dates=${dates.join(',')}`)).json(); setForeignByDate(fJson.foreign ?? {}) }
         catch { setForeignByDate({}) }
       }
     } catch {
