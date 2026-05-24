@@ -9,6 +9,7 @@ import { SeriesConfig, DateRange, DATE_RANGE_LABELS, ChartType, PeriodSegment, C
 
 const ChartOverlay = dynamic(() => import('@/components/ChartOverlay'), { ssr: false })
 const PeriodChart  = dynamic(() => import('@/components/PeriodChart'),  { ssr: false })
+const ChipsView    = dynamic(() => import('@/components/ChipsView'),    { ssr: false })
 
 // ── Overlay mode persistence ──────────────────────────────────────────────
 const STORAGE_KEY = 'chart-overlay-series'
@@ -76,7 +77,7 @@ async function fetchSegment(seg: SegSaved) {
 
 // ─────────────────────────────────────────────────────────────────────────
 export default function Home() {
-  const [mode, setMode] = useState<'overlay' | 'period' | 'disposal'>('overlay')
+  const [mode, setMode] = useState<'overlay' | 'period' | 'disposal' | 'chips'>('overlay')
 
   // ── Overlay state ──
   const [series, setSeries]             = useState<SeriesConfig[]>([])
@@ -191,7 +192,7 @@ export default function Home() {
         <div className="fixed inset-0 bg-black/60 z-20 lg:hidden" onClick={() => setSidebarOpen(false)} />
       )}
 
-      {mode !== 'disposal' && (
+      {(mode === 'overlay' || mode === 'period') && (
         <div className={`fixed inset-y-0 left-0 z-30 flex transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 lg:z-auto ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
           {mode === 'overlay' ? (
             <SeriesPanel series={series} onAdd={handleAdd} onRemove={handleRemove}
@@ -231,11 +232,16 @@ export default function Home() {
                 className={`text-xs px-3 py-1.5 transition-colors ${mode === 'disposal' ? 'bg-orange-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}>
                 注意/處置
               </button>
+              <button onClick={() => setMode('chips')}
+                className={`text-xs px-3 py-1.5 transition-colors ${mode === 'chips' ? 'bg-amber-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}>
+                籌碼/大戶
+              </button>
             </div>
 
             {anyLoading && mode === 'overlay' && <span className="text-xs text-gray-400 animate-pulse">載入中…</span>}
             {segments.some((s) => s.loading) && mode === 'period' && <span className="text-xs text-gray-400 animate-pulse">載入中…</span>}
             {mode === 'disposal' && <span className="text-xs text-orange-400/70">台股注意 / 處置推演</span>}
+            {mode === 'chips' && <span className="text-xs text-amber-400/70">集保大戶持股趨勢</span>}
           </div>
 
           <div className="flex items-center gap-1.5 flex-wrap justify-end">
@@ -278,6 +284,7 @@ export default function Home() {
           {mode === 'disposal' && (
             <DisposalTool sidebarOpen={sidebarOpen} onCloseSidebar={() => setSidebarOpen(false)} />
           )}
+          {mode === 'chips' && <ChipsView />}
         </div>
       </main>
 
