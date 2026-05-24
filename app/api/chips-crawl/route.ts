@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { fetchDJLegal } from '@/lib/dj'
-import { saveLegal, loadProgress, saveProgress } from '@/lib/legalStore'
+import { saveLegal, loadLegal, loadProgress, saveProgress } from '@/lib/legalStore'
 
 // 背景漸進爬蟲：逐檔抓 DJ 三大法人持股(近 ~10 週)，存 legalStore，供篩選器算內部大戶。
 // 每次呼叫處理 n 檔（預設 25），禮貌延遲，續爬（progress 紀錄已完成代號）。
@@ -58,20 +58,23 @@ export async function GET(req: NextRequest) {
 
     const to = new Date()
     const from = new Date(); from.setDate(from.getDate() - 7 * (KEEP_WEEKS + 2)) // 抓滿 ~52 週
-    let ok = 0, fail = 0
+    let ok = 0, fail = 0, skip = 0
     for (const code of todo) {
+      // 去重：legalStore 已含本週（opendata 週）就不重抓
+      const existing = await loadLegal(code)
+      if (existing && Object.keys(existing).some(d => d >= week)) { prog.done.push(code); skip++; continue }
       try {
         const map = await fetchDJLegal(code, dash(from), dash(to))
         const wk = weekly(map) // 收斂每週一點、滾動保留最新 52 週
         if (Object.keys(wk).length) { await saveLegal(code, wk); ok++ } else fail++
       } catch { fail++ }
       prog.done.push(code)
-      await sleep(300) // 禮貌延遲
+      await sleep(300) // 禮貌延遲（僅實際抓取時）
     }
     await saveProgress(prog)
 
     const remaining = codes.length - prog.done.length
-    return NextResponse.json({ week, total: codes.length, done: prog.done.length, remaining, justCrawled: todo.length, ok, fail })
+    return NextResponse.json({ week, total: codes.length, done: prog.done.length, remaining, justCrawled: todo.length, ok, fail, skip })
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : '爬取失敗' }, { status: 502 })
   }
