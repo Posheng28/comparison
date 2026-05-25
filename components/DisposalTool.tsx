@@ -890,7 +890,7 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
         const dod             = (dispPrice - prevClose) / prevClose * 100
         const dodAbs          = dispPrice - prevClose
         const dodArrow        = dod > 0 ? '▲' : dod < 0 ? '▼' : ''
-        const dodColor        = dod > 0 ? '#f87171' : dod < 0 ? '#4ade80' : '#9ca3af'  // 台股慣例：紅漲綠跌
+        const dodColor        = '#9ca3af'  // 中性灰（避免與卡片紅/綠的「注意/安全」語意撞色，漲跌方向用 ▲▼ 表示）
         const isTriggered     = simResult?.disposed && simResult.trigIdx === i
 
         const borderCls = isTriggered ? 'border-red-600 bg-red-950/30'
