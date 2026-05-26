@@ -285,12 +285,14 @@ function getRules(
   const filtPN = resetDate ? pastNotices.filter(p => p.dateStr >= resetDate) : pastNotices
   const nm = new Map(filtPN.map(p => [p.dateStr, p.level as 1 | 2]))
 
-  // 連續 streak：從 ref 往回逐個交易日（僅確定注意）
+  // 連續 streak：從 ref「前一交易日」(=最近完成日) 往回逐個交易日（僅確定注意）
+  // ref=預測日(下一交易日，盤中未收盤)，本身無確定注意，故從其前一交易日起算，不會被空的預測日打斷
   // 第一款 = level 1（歷史 level 2 = 款二～八，不計入規則①）
   let c1 = 0, ca = 0
   {
     let brokeC1 = false, brokeCa = false
     const d = parseD(ref)
+    do { d.setDate(d.getDate() - 1) } while (d.getDay() === 0 || d.getDay() === 6)
     for (let i = 0; i < 60 && !(brokeC1 && brokeCa); i++) {
       const ds = fmtISO(d)
       if (resetDate && ds < resetDate) break
@@ -327,8 +329,10 @@ function dropUnclosedToday<T extends { date: string }>(arr: T[]): T[] {
 /* ── Component ─────────────────────────────────────────────────────────────── */
 export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
   const today      = fmtISO(new Date())
-  const todayTD    = lastTD(today)        // 最近(已過)交易日，用於 30 日處置判定
-  const predictDay = nextTD(todayTD)      // 下一個交易日 = 預測目標日，規則窗口結尾
+  // 盤中（台股 13:30 收盤、~14:00 資料定案前）今天尚未完成 → 最近完成交易日要排除今天
+  const tdClosed   = new Date().getHours() >= 14
+  const todayTD    = lastTD(tdClosed ? today : fmtISO(new Date(Date.now() - 86400000)))
+  const predictDay = nextTD(todayTD)      // 下一個交易日 = 預測目標日（盤中即「今天」的收盤），規則窗口結尾
 
   /* ── State ── */
   const [days,        setDays]        = useState<DayEntry[]>(defaultDays)
@@ -1068,12 +1072,9 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
                 {done ? '❌ 觸發' : close ? '⚠️ 警告' : '✓ 安全'}
               </div>
               {r.consec ? (
-                // 連續規則：強調「中斷歸零」；窗口內注意若不連續不計入
+                // 連續規則：連續計數，中間任一(已完成)交易日無注意即歸零
                 <div className="text-[10px] text-gray-500 mt-1.5 pt-1.5 border-t border-gray-700/50">
-                  <div>連續計數·中斷即歸零</div>
-                  {r.win.confirmed.length > 0 && (
-                    <div className="text-gray-600">窗口內注意 {r.win.confirmed.map(md).join('、')}（未連續到 {md(r.win.to)} 故不計）</div>
-                  )}
+                  連續計數·中斷即歸零（截至 {md(rules.ref)} 前一完成交易日）
                 </div>
               ) : (
                 // 窗口規則：數窗口內筆數
