@@ -1045,10 +1045,10 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
       )}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {([
-          { label: '規則①', desc: '連3日第一款',  cur: rules.c1,  max: 3,  win: rules.windows.r1 },
-          { label: '規則②', desc: '連5日任意注意', cur: rules.ca,  max: 5,  win: rules.windows.r2 },
-          { label: '規則③', desc: '10日內≥6次',  cur: rules.c10, max: 6,  win: rules.windows.r3 },
-          { label: '規則④', desc: '30日內≥12次', cur: rules.c30, max: 12, win: rules.windows.r4 },
+          { label: '規則①', desc: '連3日第一款',  cur: rules.c1,  max: 3,  win: rules.windows.r1, consec: true },
+          { label: '規則②', desc: '連5日任意注意', cur: rules.ca,  max: 5,  win: rules.windows.r2, consec: true },
+          { label: '規則③', desc: '10日內≥6次',  cur: rules.c10, max: 6,  win: rules.windows.r3, consec: false },
+          { label: '規則④', desc: '30日內≥12次', cur: rules.c30, max: 12, win: rules.windows.r4, consec: false },
         ]).map(r => {
           const done  = r.cur >= r.max
           const close = !done && r.cur >= r.max - 1
@@ -1067,20 +1067,27 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
               <div className={`text-xs font-semibold mt-0.5 ${col}`}>
                 {done ? '❌ 觸發' : close ? '⚠️ 警告' : '✓ 安全'}
               </div>
-              {/* 窗口範圍 */}
-              <div className="text-[10px] text-gray-500 mt-1.5 pt-1.5 border-t border-gray-700/50">
-                窗口 {md(r.win.from)}~{md(r.win.to)}
-              </div>
-              {/* 已確定的注意日期 */}
-              <div className="text-[10px] mt-0.5">
-                {r.win.confirmed.length > 0 ? (
-                  <span className="text-yellow-500">
-                    已含 {r.win.confirmed.length} 確定：{r.win.confirmed.map(md).join('、')}
-                  </span>
-                ) : (
-                  <span className="text-gray-600">無確定注意</span>
-                )}
-              </div>
+              {r.consec ? (
+                // 連續規則：強調「中斷歸零」；窗口內注意若不連續不計入
+                <div className="text-[10px] text-gray-500 mt-1.5 pt-1.5 border-t border-gray-700/50">
+                  <div>連續計數·中斷即歸零</div>
+                  {r.win.confirmed.length > 0 && (
+                    <div className="text-gray-600">窗口內注意 {r.win.confirmed.map(md).join('、')}（未連續到 {md(r.win.to)} 故不計）</div>
+                  )}
+                </div>
+              ) : (
+                // 窗口規則：數窗口內筆數
+                <>
+                  <div className="text-[10px] text-gray-500 mt-1.5 pt-1.5 border-t border-gray-700/50">
+                    窗口 {md(r.win.from)}~{md(r.win.to)}
+                  </div>
+                  <div className="text-[10px] mt-0.5">
+                    {r.win.confirmed.length > 0
+                      ? <span className="text-yellow-500">已含 {r.win.confirmed.length} 確定：{r.win.confirmed.map(md).join('、')}</span>
+                      : <span className="text-gray-600">無確定注意</span>}
+                  </div>
+                </>
+              )}
             </div>
           )
         })}
