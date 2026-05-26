@@ -51,3 +51,6 @@ next-env.d.ts
 
 # DJ legal-person holdings crawl cache
 /.legaldata/
+
+# orphaned MI_QFIIS cache (fundStore removed)
+/.funddata/
