@@ -85,6 +85,42 @@ async function fetchTPEx(ymd: string): Promise<Record<string, number> | null> {
  } catch { return null }
 }
 
+// 逐日漲跌%相加（全精度）。closes 升冪(基準→最近收盤)，回傳 (closes.length-1) 個間隔相加%
+function sumDailyPct(closes: number[]): number {
+  let s = 0
+  for (let i = 1; i < closes.length; i++) s += (closes[i] / closes[i - 1] - 1) * 100
+  return s
+}
+const idxNum = (s: unknown): number | null => {
+  const n = parseFloat(String(s).replace(/,/g, '')); return isNaN(n) ? null : n
+}
+const rocToYMD = (roc: string) => {
+  const m = roc.match(/(\d+)\/(\d+)\/(\d+)/); if (!m) return ''
+  return `${+m[1] + 1911}${pad(+m[2])}${pad(+m[3])}`
+}
+/** 上櫃櫃買指數收盤 { YYYYMMDD: close }（OpenAPI，最近約一個月） */
+async function fetchTpexIndex(): Promise<Record<string, number>> {
+  try {
+    const res = await fetch('https://www.tpex.org.tw/openapi/v1/tpex_index', { headers: { 'User-Agent': 'Mozilla/5.0' } })
+    if (!res.ok) return {}
+    const arr = (await res.json()) as { Date: string; Close: string }[]
+    const out: Record<string, number> = {}
+    for (const r of arr) { const c = idxNum(r.Close); if (/^\d{8}$/.test(r.Date) && c) out[r.Date] = c }
+    return out
+  } catch { return {} }
+}
+/** 上市 TAIEX 收盤 { YYYYMMDD: close }，抓指定月份(YYYYMMDD)；回整月 */
+async function fetchTwseIndexMonth(ymd: string): Promise<Record<string, number>> {
+  try {
+    const res = await fetch(`https://www.twse.com.tw/indicesReport/MI_5MINS_HIST?response=json&date=${ymd}`, { headers: { 'User-Agent': 'Mozilla/5.0' } })
+    if (!res.ok) return {}
+    const j = (await res.json()) as { data?: string[][] }
+    const out: Record<string, number> = {}
+    for (const row of j.data ?? []) { const d = rocToYMD(String(row[0])); const c = idxNum(row[4]); if (d && c) out[d] = c }
+    return out
+  } catch { return {} }
+}
+
 /** 逐檔「逐日漲跌幅相加」→ 各檔累積%，再對全市場取簡單(等權)平均
  *  法規：個股累積漲跌% = 期間內各營業日漲跌%之「相加」（非收盤比值/連乘）；
  *  全體均值 = 全市場每檔依此計算之累積%的『簡單平均值』（等權，非市值加權）。 */
