@@ -17,9 +17,9 @@ import { loadSnapshot, saveSnapshot, pruneExcept } from '@/lib/marketStore'
 // 演算法：
 //  1. 由今日往回找出最近 6 個已收盤交易日（含基準日；非交易日資料源回空 → 跳過，自動避開假日）。
 //  2. 每個交易日抓全市場「當日漲跌幅%」快照（已存則略過），存檔並修剪到只留這 6 天。
-//  3. 6 個交易日 = 5 個間隔；逐檔連乘 (1+漲跌幅) − 1 = 該檔已知累積漲跌%
-//     （= (最近收盤 / 基準收盤) − 1，與法規「最後成交價累積漲跌%」一致）。
-//  4. 對全市場「整段都有交易」的股票取簡單算術平均。
+//  3. 6 個交易日 = 5 個間隔；逐檔將各日漲跌幅「相加」= 該檔已知累積漲跌%
+//     （法規：累積漲跌% = 各營業日漲跌%之和，非收盤比值/連乘）。
+//  4. 對全市場「整段都有交易」的股票取簡單(等權)算術平均。
 
 const WINDOW = 6 // 含基準日的已收盤交易日數 → 5 個已知間隔；第 6 個間隔=當日(變數)另外併入
 
@@ -85,7 +85,9 @@ async function fetchTPEx(ymd: string): Promise<Record<string, number> | null> {
  } catch { return null }
 }
 
-/** 逐檔連乘 days[1..] 的漲跌幅 → 各檔累積%，再對全市場取簡單平均 */
+/** 逐檔「逐日漲跌幅相加」→ 各檔累積%，再對全市場取簡單(等權)平均
+ *  法規：個股累積漲跌% = 期間內各營業日漲跌%之「相加」（非收盤比值/連乘）；
+ *  全體均值 = 全市場每檔依此計算之累積%的『簡單平均值』（等權，非市值加權）。 */
 function avgCumulative(snaps: Record<string, Record<string, number>>, days: string[]): { avg: number; n: number } {
   const intervals = days.slice(1) // 6 個交易日 = 5 個間隔（首日為基準，不含其自身漲跌）
   if (intervals.length === 0) return { avg: 0, n: 0 }
@@ -94,25 +96,33 @@ function avgCumulative(snaps: Record<string, Record<string, number>>, days: stri
     const s = snaps[d] ?? {}
     codes = new Set([...codes].filter(c => c in s))
   }
+  const trunc2 = (x: number) => Math.trunc(x * 100) / 100   // 每日漲跌% 取小數 2 位無條件捨去(向零)
   let sum = 0, n = 0
   for (const c of codes) {
-    let prod = 1
-    for (const d of intervals) prod *= 1 + snaps[d][c] / 100
-    sum += (prod - 1) * 100
+    let cum = 0
+    for (const d of intervals) cum += trunc2(snaps[d][c])   // 逐日(截斷後)漲跌幅相加
+    sum += cum
     n++
   }
   return { avg: n ? sum / n : 0, n }
 }
 
 export async function GET(req: NextRequest) {
-  const bust = new URL(req.url).searchParams.get('bust') === '1'
+  const params = new URL(req.url).searchParams
+  const bust = params.get('bust') === '1'
+  // date=YYYYMMDD（個股最近收盤日）：以此日為窗口結尾往回取 WINDOW 日，確保全體均值與個股同窗口。
+  // 未帶時退回 new Date()（可能因盤中/資料延遲而落後個股一個交易日）。
+  const dateParam = params.get('date')
+  const startDate = dateParam && /^\d{8}$/.test(dateParam)
+    ? new Date(+dateParam.slice(0, 4), +dateParam.slice(4, 6) - 1, +dateParam.slice(6, 8))
+    : new Date()
 
   // 找出最近 WINDOW 個交易日，並備妥兩市場快照（以 TWSE 是否有資料判定交易日）
   const days: string[] = []                              // 升冪 [最舊..最新]
   const twse: Record<string, Record<string, number>> = {}
   const tpex: Record<string, Record<string, number>> = {}
 
-  const d = new Date()
+  const d = new Date(startDate)
   let guard = 0
   while (days.length < WINDOW && guard < 25) {
     guard++
@@ -156,7 +166,7 @@ export async function GET(req: NextRequest) {
     baseDate: days[0],             // 累積基準（6 日窗口前一交易日收盤，如 5/15）
     lastClosedDate: calcDate,      // 最近已收盤交易日（如 5/22）
     days,
-    note: '此為已知部分累積漲幅平均（基準→最近收盤日，5 個間隔）；判定「當日(下一交易日)」注意時須再併入當日全市場漲跌成為第 6 個間隔（當日為不可預測變數）',
+    note: '此為已知部分累積漲幅平均（基準→最近收盤日，5 個間隔，各日漲跌%相加後取等權平均）；判定「當日(下一交易日)」注意時須再併入當日全市場漲跌成為第 6 個間隔（當日為不可預測變數）',
     twse: { avg: +tw.avg.toFixed(2), count: tw.n },
     tpex: tpexDays.length === WINDOW
       ? { avg: +tp.avg.toFixed(2), count: tp.n }
