@@ -146,69 +146,46 @@ function avgCumulative(snaps: Record<string, Record<string, number>>, days: stri
 export async function GET(req: NextRequest) {
   const params = new URL(req.url).searchParams
   const bust = params.get('bust') === '1'
-  // date=YYYYMMDD（個股最近收盤日）：以此日為窗口結尾往回取 WINDOW 日，確保全體均值與個股同窗口。
-  // 未帶時退回 new Date()（可能因盤中/資料延遲而落後個股一個交易日）。
   const dateParam = params.get('date')
-  const startDate = dateParam && /^\d{8}$/.test(dateParam)
-    ? new Date(+dateParam.slice(0, 4), +dateParam.slice(4, 6) - 1, +dateParam.slice(6, 8))
-    : new Date()
+  const endYMD = dateParam && /^\d{8}$/.test(dateParam) ? dateParam : toYMD(new Date())
 
-  // 找出最近 WINDOW 個交易日，並備妥兩市場快照（以 TWSE 是否有資料判定交易日）
-  const days: string[] = []                              // 升冪 [最舊..最新]
-  const twse: Record<string, Record<string, number>> = {}
-  const tpex: Record<string, Record<string, number>> = {}
+  // 取兩市場指數收盤序列（TAIEX 抓 endMonth + 前一月以防跨月；櫃買指數 OpenAPI 給近一個月）
+  const prevMonthYMD = toYMD(new Date(+endYMD.slice(0, 4), +endYMD.slice(4, 6) - 2, 15))
+  const [tpexIdx, twseA, twseB] = await Promise.all([
+    fetchTpexIndex(),
+    fetchTwseIndexMonth(endYMD),
+    fetchTwseIndexMonth(prevMonthYMD),
+  ])
+  const twseIdx = { ...twseB, ...twseA }
 
-  const d = new Date(startDate)
-  let guard = 0
-  while (days.length < WINDOW && guard < 25) {
-    guard++
-    const dow = d.getDay()
-    if (dow !== 0 && dow !== 6) {                        // 先跳過週末
-      const ymd = toYMD(d)
-      let tw = bust ? null : await loadSnapshot('TWSE', ymd)
-      if (!tw) { tw = await fetchTWSE(ymd); if (tw) await saveSnapshot('TWSE', ymd, tw) }
-      if (tw) {                                          // 有資料 = 交易日
-        let tp = bust ? null : await loadSnapshot('TPEx', ymd)
-        if (!tp) { tp = await fetchTPEx(ymd); if (tp) await saveSnapshot('TPEx', ymd, tp) }
-        days.unshift(ymd)
-        twse[ymd] = tw
-        if (tp) tpex[ymd] = tp
-      }
-    }
-    d.setDate(d.getDate() - 1)
+  // 取 ≤ endYMD 的最近 WINDOW 個交易日收盤（升冪）
+  const pickWindow = (idx: Record<string, number>): { days: string[]; closes: number[] } => {
+    const ds = Object.keys(idx).filter(d => d <= endYMD).sort().slice(-WINDOW)
+    return { days: ds, closes: ds.map(d => idx[d]) }
   }
+  const tpW = pickWindow(tpexIdx)
+  const twW = pickWindow(twseIdx)
 
-  if (days.length < WINDOW) {
-    return NextResponse.json({ error: `只取得 ${days.length} 個交易日，不足 ${WINDOW} 天` }, { status: 503 })
-  }
+  const mkResult = (w: { days: string[]; closes: number[] }) =>
+    w.closes.length === WINDOW
+      ? { avg: +sumDailyPct(w.closes).toFixed(2), baseDate: w.days[0], lastClosedDate: w.days[WINDOW - 1] }
+      : null
 
-  // 只保留這 6 個交易日的快照（規矩：超過即刪）
-  await pruneExcept('TWSE', days)
-  await pruneExcept('TPEx', days.filter(x => x in tpex))
+  const tp = mkResult(tpW)
+  const tw = mkResult(twW)
+  const lastClosed = tw?.lastClosedDate ?? tp?.lastClosedDate ?? endYMD
+  const baseDate = tw?.baseDate ?? tp?.baseDate ?? ''
 
-  const calcDate = days[days.length - 1]
-  const cacheKey = `market-avg:${calcDate}`
-  if (!bust) {
-    const cached = getCached(cacheKey)
-    if (cached) return NextResponse.json({ ...(cached as object), cached: true })
-  }
-
-  const tw = avgCumulative(twse, days)
-  const tpexDays = days.filter(x => x in tpex)
-  const tp = tpexDays.length === WINDOW ? avgCumulative(tpex, days) : { avg: 0, n: 0 }
+  const cacheKey = `market-avg:idx:${endYMD}`
+  if (!bust) { const c = getCached(cacheKey); if (c) return NextResponse.json({ ...(c as object), cached: true }) }
 
   const result = {
-    knownIntervals: WINDOW - 1,    // 已知漲跌間隔數（= 5）
-    baseDate: days[0],             // 累積基準（6 日窗口前一交易日收盤，如 5/15）
-    lastClosedDate: calcDate,      // 最近已收盤交易日（如 5/22）
-    days,
-    note: '此為已知部分累積漲幅平均（基準→最近收盤日，5 個間隔，各日漲跌%相加後取等權平均）；判定「當日(下一交易日)」注意時須再併入當日全市場漲跌成為第 6 個間隔（當日為不可預測變數）',
-    twse: { avg: +tw.avg.toFixed(2), count: tw.n },
-    tpex: tpexDays.length === WINDOW
-      ? { avg: +tp.avg.toFixed(2), count: tp.n }
-      : { avg: null, count: 0, note: `上櫃僅取得 ${tpexDays.length}/${WINDOW} 日，資料累積中` },
+    knownIntervals: WINDOW - 1,
+    baseDate, lastClosedDate: lastClosed,
+    note: '全體均值 = 發行量加權指數(上市TAIEX/上櫃櫃買指數)逐日漲跌%相加(全精度)；當日(下一交易日)以0%計',
+    twse: tw ? { avg: tw.avg } : { avg: null },
+    tpex: tp ? { avg: tp.avg } : { avg: null },
   }
-
-  setCached(cacheKey, result, 6 * 60 * 60 * 1000) // 同一交易日數字不變，快取 6 小時
+  setCached(cacheKey, result, 6 * 60 * 60 * 1000)
   return NextResponse.json(result)
 }
