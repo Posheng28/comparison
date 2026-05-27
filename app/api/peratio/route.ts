@@ -12,8 +12,8 @@ async function tpex() {
     map[String(x.SecuritiesCompanyCode).trim()] = { pe, pbr }
     if (pe && pe > 0) pes.push(pe); if (pbr && pbr > 0) pbrs.push(pbr)
   }
-  const avg = (a: number[]) => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null
-  return { map, mktPe: avg(pes), mktPbr: avg(pbrs) }
+  const median = (a: number[]) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2 }
+  return { map, mktPe: median(pes), mktPbr: median(pbrs) }
 }
 async function twse(date: string) {
   const r = await fetch(`https://www.twse.com.tw/exchangeReport/BWIBBU_d?response=json&date=${date}&selectType=ALL`, { headers: { 'User-Agent': 'Mozilla/5.0' } })
@@ -27,8 +27,8 @@ async function twse(date: string) {
     map[code] = { pe, pbr }
     if (pe && pe > 0) pes.push(pe); if (pbr && pbr > 0) pbrs.push(pbr)
   }
-  const avg = (a: number[]) => a.length ? a.reduce((x, y) => x + y, 0) / a.length : null
-  return { map, mktPe: avg(pes), mktPbr: avg(pbrs) }
+  const median = (a: number[]) => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y); const m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2 }
+  return { map, mktPe: median(pes), mktPbr: median(pbrs) }
 }
 type PeSrc = { map: Record<string, { pe: number|null; pbr: number|null }>; mktPe: number|null; mktPbr: number|null }
 export async function GET(req: NextRequest) {
