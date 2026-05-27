@@ -6,11 +6,12 @@
 ## 專案概觀
 
 台股圖表比較工具（Next.js 16 App Router + TypeScript + Tailwind，dev: `npm run dev` → http://localhost:3000）。
-四個模式（`app/page.tsx` 的 `mode`）：
+五個模式（`app/page.tsx` 的 `mode`）：
 - `overlay`：多檔疊加比較（`SeriesPanel` + `ChartOverlay`）
 - `period`：時段比較，起點對齊（`PeriodPanel` + `PeriodChart`）
 - `disposal`：**台股注意/處置推演**（`DisposalTool`）
 - `chips`：**集保大戶 / 內部大戶籌碼**（`ChipsView` 個股趨勢 + `ChipsScreener` 篩選排行）← 見第六節
+- `fund`：**基金 / 經理人持股**（`FundView`）← 見第七節
 
 ---
 
@@ -167,13 +168,14 @@
 ## 四、檔案地圖
 
 ```
-app/page.tsx                  四模式切換（overlay/period/disposal/chips）
+app/page.tsx                  五模式切換（overlay/period/disposal/chips/fund）
 components/
   DisposalTool.tsx            注意/處置推演（核心，~1100 行）
   PeriodPanel.tsx             時段比較側欄（年份+歷史）
   SeriesPanel/ChartOverlay/PeriodPanel/PeriodChart   疊加與時段圖
   ChipsView.tsx               籌碼-個股大戶趨勢（自訂張數區間、逐週扣三大法人）
   ChipsScreener.tsx           籌碼-篩選排行（大戶/內部大戶 top50、lazy 自動爬）
+  FundView.tsx                基金持股表格 + 雙軌比較 + 更新本期按鈕
 app/api/
   stocks/                     Yahoo + TWSE/TPEx 補抓股價，回 market（含 volume）
   notices/ disposal/ disposal-list/   注意/處置紀錄
@@ -182,6 +184,18 @@ app/api/
   foreign/                    單股逐週三大法人持股%（DJ，via lib/dj）
   chips-rank/                 全市場大戶/內部大戶排行（opendata + legalStore）
   chips-crawl/                背景漸進爬 DJ 三大法人（種子/維護/去重）
+  fund/                       基金持股 API（?fund=、?stock=、?pair=、裸 → {funds}）
+  fund-crawl/                 更新本期（POST {fundId}）；18:30 前 → 425；未實作 → 501
+lib/fund/
+  types.ts                    FundDef / FundSnapshot / FundHolding / ReportType
+  sources.ts                  ALL_DEFS（13 檔基金定義，含 relatedEtf）
+  store.ts                    loadSnapshot / saveSnapshot / listPeriods
+  query.ts                    stockDistribution / dualTrack
+  seed.ts                     種子資料工具
+  period.ts                   期別格式化
+  timegate.ts                 18:30 gate（isAfterCutoff）
+data/funds/                   已提交歷史種子資料（JOY88 來源，3 年 × 13 檔）
+.funddata/etf/                ETF 每日持股本機快取（gitignore）
 lib/cache.ts                  記憶體快取（getCached/setCached/deleteCachePrefix）
 lib/chipsStore.ts             單股 TDCC 級距週資料（per-ticker）
 lib/rankStore.ts              全市場大戶佔比每週快照（opendata）
@@ -254,3 +268,32 @@ docs/PROJECT_NOTES.md         （本檔）
 ### 待辦（之後）
 - 週報買賣超維護匯入器（取代維護期的 DJ 抓取，更省）：缺上櫃週報端點 + 需發行股數換算（買賣超→%）+ 除權息漂移處理。**有 1970 檔的 DJ 絕對持股當基準，可改用 `TWT54U?...&selectType=ALLBUT0999` 全市場買賣超累加維護**。
 - 回測系統（之前規劃過，未做）：抽 `disposalEngine` 純函式 + 歷史逐日重跑（見對話規劃）。
+
+---
+
+## 七、基金 / 經理人持股（fund 模式）
+
+目標：查看各基金目前持股明細，並與對應 ETF 做雙軌比較（基金經理人相對 ETF 的超/減配）。
+
+### 資料結構
+- **13 檔基金定義**（`lib/fund/sources.ts`，`ALL_DEFS`）：含月報 Top10、季報全持股、ETF 每日持股（`ReportType`）；`FundDef.relatedEtf` 指向對應 ETF 的 fundId（若無則無雙軌比較）。
+- **歷史種子資料**：`data/funds/` 目錄已 commit，來源為 JOY88 手工整理，約 3 年歷史；13 檔 × 多期 JSON。
+- **ETF 每日持股快取**：`.funddata/etf/`（本機磁碟，已 gitignore），非 commit 資料。
+
+### API
+| 端點 | 用途 |
+|------|------|
+| `GET /api/fund` | `{funds}`（所有定義） |
+| `GET /api/fund?fund=<id>` | `{def, monthly, quarterly}`（該檔最新快照） |
+| `GET /api/fund?stock=<code>` | `{distribution}`（某支股跨基金分布） |
+| `GET /api/fund?pair=<fundId>,<etfId>` | `{rows: DualRow[]}`（雙軌差異，`dualTrack` 函式） |
+| `POST /api/fund-crawl {fundId}` | 18:30 前 → 425；策略未實作 → 501；成功 → 200 |
+
+### FundView 元件（`components/FundView.tsx`）
+- 基金 `<select>` + 持股表格（月報/季報最新快照）。
+- **雙軌比較**：`def.relatedEtf` 存在時出現「▸ 雙軌比較」切換；展開後抓 `?pair=` 並顯示 `code / name / 基金% / ETF% / 差異`（差異正=teal、負=red）。
+- **更新本期按鈕**：POST `/api/fund-crawl`；425 → 提示「18:30 後再試」；501 → 提示「live 更新尚未啟用」；200 → re-fetch 快照。
+- AbortController 防重複/切換競態（與其他 API fetch 同一模式）。
+
+### live 爬蟲（待實作）
+各來源策略（`def.crawl`）：`nomura-api` / `capital-api` / `fuhua-excel` / `uni-stealth` / `allianz` / `sitca`，目前全部 → 501。實作時補在 `fund-crawl/route.ts` 的 switch。

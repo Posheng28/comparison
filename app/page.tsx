@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic'
 import SeriesPanel  from '@/components/SeriesPanel'
 import PeriodPanel  from '@/components/PeriodPanel'
 import DisposalTool from '@/components/DisposalTool'
+import FundView     from '@/components/FundView'
 import { SeriesConfig, DateRange, DATE_RANGE_LABELS, ChartType, PeriodSegment, COLORS } from '@/lib/types'
 
 const ChartOverlay = dynamic(() => import('@/components/ChartOverlay'), { ssr: false })
@@ -78,7 +79,7 @@ async function fetchSegment(seg: SegSaved) {
 
 // ─────────────────────────────────────────────────────────────────────────
 export default function Home() {
-  const [mode, setMode] = useState<'overlay' | 'period' | 'disposal' | 'chips'>('overlay')
+  const [mode, setMode] = useState<'overlay' | 'period' | 'disposal' | 'chips' | 'fund'>('overlay')
   const [chipsTab, setChipsTab] = useState<'stock' | 'rank'>('stock')
 
   // ── Overlay state ──
@@ -238,12 +239,17 @@ export default function Home() {
                 className={`text-xs px-3 py-1.5 transition-colors ${mode === 'chips' ? 'bg-amber-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}>
                 籌碼/大戶
               </button>
+              <button onClick={() => setMode('fund')}
+                className={`text-xs px-3 py-1.5 transition-colors ${mode === 'fund' ? 'bg-teal-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}>
+                基金
+              </button>
             </div>
 
             {anyLoading && mode === 'overlay' && <span className="text-xs text-gray-400 animate-pulse">載入中…</span>}
             {segments.some((s) => s.loading) && mode === 'period' && <span className="text-xs text-gray-400 animate-pulse">載入中…</span>}
             {mode === 'disposal' && <span className="text-xs text-orange-400/70">台股注意 / 處置推演</span>}
             {mode === 'chips' && <span className="text-xs text-amber-400/70">集保大戶持股趨勢</span>}
+            {mode === 'fund'  && <span className="text-xs text-teal-400/70">基金 / 經理人持股</span>}
           </div>
 
           <div className="flex items-center gap-1.5 flex-wrap justify-end">
@@ -297,6 +303,11 @@ export default function Home() {
               <div className="flex-1 min-h-0">
                 {chipsTab === 'stock' ? <ChipsView /> : <ChipsScreener />}
               </div>
+            </div>
+          )}
+          {mode === 'fund' && (
+            <div className="h-full overflow-hidden">
+              <FundView />
             </div>
           )}
         </div>
