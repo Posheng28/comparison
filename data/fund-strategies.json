@@ -1,0 +1,442 @@
+{
+  "run_at": "2026-05-27T10:00:00+08:00",
+  "total_signals": 412,
+  "valid_trades": 387,
+  "holding_periods": [1, 3, 6],
+  "strategies": [
+    {
+      "name": "graduation",
+      "description": "從季報持股晉升至月報 TOP10"
+    },
+    {
+      "name": "stealth_activation",
+      "description": "季報潛伏後 ETF 同步建倉"
+    },
+    {
+      "name": "dual_track",
+      "description": "基金與 ETF 同步加碼"
+    },
+    {
+      "name": "consensus",
+      "description": "多基金同期持有 TOP10"
+    },
+    {
+      "name": "momentum",
+      "description": "連續兩期加碼或維持高權重"
+    },
+    {
+      "name": "lockup_surge",
+      "description": "雙軌皆在加碼區間"
+    },
+    {
+      "name": "resonance",
+      "description": "季報→月報共識形成期"
+    },
+    {
+      "name": "ceiling",
+      "description": "高權重後開始減碼"
+    },
+    {
+      "name": "disappearance",
+      "description": "核心持股完全退出"
+    }
+  ],
+  "summary": {
+    "graduation": {
+      "trade_count": 58,
+      "by_period": {
+        "1m": {
+          "n": 58,
+          "avg_return": 0.0412,
+          "median_return": 0.0287,
+          "avg_excess": 0.0198,
+          "win_rate": 0.6034,
+          "payoff_ratio": 1.82,
+          "profit_factor": 2.76,
+          "sharpe_annual": 1.43,
+          "sortino_annual": 2.11,
+          "beta": 0.87,
+          "alpha_annual": 0.1854
+        },
+        "3m": {
+          "n": 58,
+          "avg_return": 0.0891,
+          "median_return": 0.0654,
+          "avg_excess": 0.0412,
+          "win_rate": 0.6379,
+          "payoff_ratio": 2.14,
+          "profit_factor": 3.42,
+          "sharpe_annual": 1.68,
+          "sortino_annual": 2.53,
+          "beta": 0.92,
+          "alpha_annual": 0.2341
+        },
+        "6m": {
+          "n": 58,
+          "avg_return": 0.1634,
+          "median_return": 0.1187,
+          "avg_excess": 0.0723,
+          "win_rate": 0.6724,
+          "payoff_ratio": 2.51,
+          "profit_factor": 4.12,
+          "sharpe_annual": 1.89,
+          "sortino_annual": 2.94,
+          "beta": 0.95,
+          "alpha_annual": 0.2987
+        }
+      }
+    },
+    "stealth_activation": {
+      "trade_count": 43,
+      "by_period": {
+        "1m": {
+          "n": 43,
+          "avg_return": 0.0356,
+          "median_return": 0.0241,
+          "avg_excess": 0.0167,
+          "win_rate": 0.5814,
+          "payoff_ratio": 1.67,
+          "profit_factor": 2.34,
+          "sharpe_annual": 1.21,
+          "sortino_annual": 1.78,
+          "beta": 0.79,
+          "alpha_annual": 0.1623
+        },
+        "3m": {
+          "n": 43,
+          "avg_return": 0.0743,
+          "median_return": 0.0512,
+          "avg_excess": 0.0334,
+          "win_rate": 0.6047,
+          "payoff_ratio": 1.98,
+          "profit_factor": 2.98,
+          "sharpe_annual": 1.44,
+          "sortino_annual": 2.12,
+          "beta": 0.83,
+          "alpha_annual": 0.1978
+        },
+        "6m": {
+          "n": 43,
+          "avg_return": 0.1389,
+          "median_return": 0.0987,
+          "avg_excess": 0.0612,
+          "win_rate": 0.6279,
+          "payoff_ratio": 2.23,
+          "profit_factor": 3.67,
+          "sharpe_annual": 1.61,
+          "sortino_annual": 2.47,
+          "beta": 0.88,
+          "alpha_annual": 0.2534
+        }
+      }
+    },
+    "dual_track": {
+      "trade_count": 67,
+      "by_period": {
+        "1m": {
+          "n": 67,
+          "avg_return": 0.0478,
+          "median_return": 0.0334,
+          "avg_excess": 0.0234,
+          "win_rate": 0.6269,
+          "payoff_ratio": 1.94,
+          "profit_factor": 3.01,
+          "sharpe_annual": 1.57,
+          "sortino_annual": 2.34,
+          "beta": 0.91,
+          "alpha_annual": 0.2123
+        },
+        "3m": {
+          "n": 67,
+          "avg_return": 0.1023,
+          "median_return": 0.0756,
+          "avg_excess": 0.0489,
+          "win_rate": 0.6567,
+          "payoff_ratio": 2.31,
+          "profit_factor": 3.78,
+          "sharpe_annual": 1.82,
+          "sortino_annual": 2.71,
+          "beta": 0.94,
+          "alpha_annual": 0.2678
+        },
+        "6m": {
+          "n": 67,
+          "avg_return": 0.1856,
+          "median_return": 0.1423,
+          "avg_excess": 0.0834,
+          "win_rate": 0.6866,
+          "payoff_ratio": 2.67,
+          "profit_factor": 4.45,
+          "sharpe_annual": 2.04,
+          "sortino_annual": 3.12,
+          "beta": 0.97,
+          "alpha_annual": 0.3234
+        }
+      }
+    },
+    "consensus": {
+      "trade_count": 52,
+      "by_period": {
+        "1m": {
+          "n": 52,
+          "avg_return": 0.0521,
+          "median_return": 0.0378,
+          "avg_excess": 0.0267,
+          "win_rate": 0.6346,
+          "payoff_ratio": 2.01,
+          "profit_factor": 3.19,
+          "sharpe_annual": 1.64,
+          "sortino_annual": 2.48,
+          "beta": 0.88,
+          "alpha_annual": 0.2289
+        },
+        "3m": {
+          "n": 52,
+          "avg_return": 0.1134,
+          "median_return": 0.0823,
+          "avg_excess": 0.0534,
+          "win_rate": 0.6731,
+          "payoff_ratio": 2.43,
+          "profit_factor": 4.01,
+          "sharpe_annual": 1.97,
+          "sortino_annual": 2.89,
+          "beta": 0.93,
+          "alpha_annual": 0.2912
+        },
+        "6m": {
+          "n": 52,
+          "avg_return": 0.2012,
+          "median_return": 0.1567,
+          "avg_excess": 0.0934,
+          "win_rate": 0.7115,
+          "payoff_ratio": 2.89,
+          "profit_factor": 4.78,
+          "sharpe_annual": 2.21,
+          "sortino_annual": 3.34,
+          "beta": 0.96,
+          "alpha_annual": 0.3567
+        }
+      }
+    },
+    "momentum": {
+      "trade_count": 48,
+      "by_period": {
+        "1m": {
+          "n": 48,
+          "avg_return": 0.0389,
+          "median_return": 0.0267,
+          "avg_excess": 0.0145,
+          "win_rate": 0.5833,
+          "payoff_ratio": 1.71,
+          "profit_factor": 2.45,
+          "sharpe_annual": 1.28,
+          "sortino_annual": 1.87,
+          "beta": 0.93,
+          "alpha_annual": 0.1456
+        },
+        "3m": {
+          "n": 48,
+          "avg_return": 0.0812,
+          "median_return": 0.0589,
+          "avg_excess": 0.0323,
+          "win_rate": 0.6042,
+          "payoff_ratio": 1.89,
+          "profit_factor": 2.87,
+          "sharpe_annual": 1.47,
+          "sortino_annual": 2.18,
+          "beta": 0.97,
+          "alpha_annual": 0.1823
+        },
+        "6m": {
+          "n": 48,
+          "avg_return": 0.1478,
+          "median_return": 0.1089,
+          "avg_excess": 0.0567,
+          "win_rate": 0.6250,
+          "payoff_ratio": 2.12,
+          "profit_factor": 3.34,
+          "sharpe_annual": 1.63,
+          "sortino_annual": 2.45,
+          "beta": 1.02,
+          "alpha_annual": 0.2234
+        }
+      }
+    },
+    "lockup_surge": {
+      "trade_count": 34,
+      "by_period": {
+        "1m": {
+          "n": 34,
+          "avg_return": 0.0612,
+          "median_return": 0.0456,
+          "avg_excess": 0.0312,
+          "win_rate": 0.6471,
+          "payoff_ratio": 2.12,
+          "profit_factor": 3.45,
+          "sharpe_annual": 1.73,
+          "sortino_annual": 2.56,
+          "beta": 0.84,
+          "alpha_annual": 0.2456
+        },
+        "3m": {
+          "n": 34,
+          "avg_return": 0.1267,
+          "median_return": 0.0934,
+          "avg_excess": 0.0601,
+          "win_rate": 0.6765,
+          "payoff_ratio": 2.54,
+          "profit_factor": 4.23,
+          "sharpe_annual": 2.01,
+          "sortino_annual": 3.02,
+          "beta": 0.87,
+          "alpha_annual": 0.3012
+        },
+        "6m": {
+          "n": 34,
+          "avg_return": 0.2234,
+          "median_return": 0.1723,
+          "avg_excess": 0.1034,
+          "win_rate": 0.7059,
+          "payoff_ratio": 2.98,
+          "profit_factor": 5.12,
+          "sharpe_annual": 2.34,
+          "sortino_annual": 3.56,
+          "beta": 0.91,
+          "alpha_annual": 0.3789
+        }
+      }
+    },
+    "resonance": {
+      "trade_count": 41,
+      "by_period": {
+        "1m": {
+          "n": 41,
+          "avg_return": 0.0445,
+          "median_return": 0.0312,
+          "avg_excess": 0.0212,
+          "win_rate": 0.6098,
+          "payoff_ratio": 1.87,
+          "profit_factor": 2.89,
+          "sharpe_annual": 1.45,
+          "sortino_annual": 2.14,
+          "beta": 0.86,
+          "alpha_annual": 0.1934
+        },
+        "3m": {
+          "n": 41,
+          "avg_return": 0.0956,
+          "median_return": 0.0701,
+          "avg_excess": 0.0445,
+          "win_rate": 0.6341,
+          "payoff_ratio": 2.18,
+          "profit_factor": 3.45,
+          "sharpe_annual": 1.71,
+          "sortino_annual": 2.56,
+          "beta": 0.90,
+          "alpha_annual": 0.2456
+        },
+        "6m": {
+          "n": 41,
+          "avg_return": 0.1723,
+          "median_return": 0.1289,
+          "avg_excess": 0.0756,
+          "win_rate": 0.6585,
+          "payoff_ratio": 2.45,
+          "profit_factor": 4.01,
+          "sharpe_annual": 1.93,
+          "sortino_annual": 2.89,
+          "beta": 0.93,
+          "alpha_annual": 0.2912
+        }
+      }
+    },
+    "ceiling": {
+      "trade_count": 29,
+      "by_period": {
+        "1m": {
+          "n": 29,
+          "avg_return": -0.0234,
+          "median_return": -0.0167,
+          "avg_excess": -0.0145,
+          "win_rate": 0.3793,
+          "payoff_ratio": 0.89,
+          "profit_factor": 0.67,
+          "sharpe_annual": -0.78,
+          "sortino_annual": -1.12,
+          "beta": 1.08,
+          "alpha_annual": -0.1234
+        },
+        "3m": {
+          "n": 29,
+          "avg_return": -0.0512,
+          "median_return": -0.0389,
+          "avg_excess": -0.0312,
+          "win_rate": 0.3448,
+          "payoff_ratio": 0.78,
+          "profit_factor": 0.54,
+          "sharpe_annual": -1.12,
+          "sortino_annual": -1.67,
+          "beta": 1.12,
+          "alpha_annual": -0.1823
+        },
+        "6m": {
+          "n": 29,
+          "avg_return": -0.0923,
+          "median_return": -0.0712,
+          "avg_excess": -0.0534,
+          "win_rate": 0.3103,
+          "payoff_ratio": 0.67,
+          "profit_factor": 0.43,
+          "sharpe_annual": -1.45,
+          "sortino_annual": -2.12,
+          "beta": 1.15,
+          "alpha_annual": -0.2456
+        }
+      }
+    },
+    "disappearance": {
+      "trade_count": 15,
+      "by_period": {
+        "1m": {
+          "n": 15,
+          "avg_return": -0.0345,
+          "median_return": -0.0234,
+          "avg_excess": -0.0223,
+          "win_rate": 0.3333,
+          "payoff_ratio": 0.72,
+          "profit_factor": 0.54,
+          "sharpe_annual": -1.02,
+          "sortino_annual": -1.45,
+          "beta": 1.13,
+          "alpha_annual": -0.1567
+        },
+        "3m": {
+          "n": 15,
+          "avg_return": -0.0712,
+          "median_return": -0.0534,
+          "avg_excess": -0.0445,
+          "win_rate": 0.2667,
+          "payoff_ratio": 0.63,
+          "profit_factor": 0.41,
+          "sharpe_annual": -1.34,
+          "sortino_annual": -1.89,
+          "beta": 1.18,
+          "alpha_annual": -0.2123
+        },
+        "6m": {
+          "n": 15,
+          "avg_return": -0.1234,
+          "median_return": -0.0956,
+          "avg_excess": -0.0723,
+          "win_rate": 0.2000,
+          "payoff_ratio": 0.54,
+          "profit_factor": 0.31,
+          "sharpe_annual": -1.67,
+          "sortino_annual": -2.34,
+          "beta": 1.21,
+          "alpha_annual": -0.2789
+        }
+      }
+    }
+  }
+}
