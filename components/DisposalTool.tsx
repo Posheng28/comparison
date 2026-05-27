@@ -383,6 +383,10 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
   const [avg60Vol,     setAvg60Vol]     = useState<number | null>(null)
   const [clause3VolMet, setClause3VolMet] = useState(false)
 
+  // 款六：PE/PBR 資料
+  const [peData, setPeData] = useState<{ pe:number|null; pbr:number|null; mktPe:number|null; mktPbr:number|null }|null>(null)
+  const [clause6Assume, setClause6Assume] = useState(false)
+
   const [queryCode,    setQueryCode]    = useState('')
   const [importStatus, setImportStatus] = useState<ImportStatus>({ loading: false })
 
@@ -443,6 +447,8 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
           setDays(newDays)
           setSimPrices(newDays.map(() => null))
           stockOk = true
+          // 款六：抓 PE/PBR
+          fetch(`/api/peratio?market=${json.market}&code=${code}&date=${todayTD.replace(/-/g,'')}`).then(r=>r.json()).then(setPeData).catch(()=>setPeData(null))
         }
       }
       if (!stockOk) {
@@ -529,6 +535,8 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
           const recent = all.slice(-6)
           const newDays: DayEntry[] = recent.map(d => ({ baseDateStr: d.date, bp: Math.round(d.value * 10) / 10 }))
           setDays(newDays); setSimPrices(newDays.map(() => null)); stockOk = true
+          // 款六：抓 PE/PBR
+          fetch(`/api/peratio?market=${json.market}&code=${code}&date=${todayTD.replace(/-/g,'')}`).then(r=>r.json()).then(setPeData).catch(()=>setPeData(null))
         }
       }
       if (!stockOk) { setImportStatus({ loading: false, error: `找不到「${code}」的股價資料` }); return }
@@ -683,14 +691,20 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
   // 款二橋接：把既有 checkClause2 結果轉成引擎輸入
   const clause2ForEngine = () =>
     clause2.triggered ? { window: clause2.window!, pct: clause2.pct!, exempt: clause2.exempt } : null
-  // 組裝單卡引擎輸入並評估（款六/十二 的當日資料 Task5/6 才接，這裡先給 null/false）
+
+  // 款六：PE/PBR 依預測股價等比例縮放（最近收盤的 PE/PBR × 預測價/最近收盤）
+  const lastClose = priceHistory.at(-1)?.value ?? startPrice
+  const pePredict  = (price: number) => peData?.pe  != null && lastClose > 0 ? peData.pe  * price / lastClose : null
+  const pbrPredict = (price: number) => peData?.pbr != null && lastClose > 0 ? peData.pbr * price / lastClose : null
+
+  // 組裝單卡引擎輸入並評估
   const evalCard = (i: number, price: number): ClauseResult[] => evalClauses({
     market, prevClose: prevCloseOf(i), sumKnown: knownSumOf(i), price,
     spreadBase: spreadBaseOf(i),
     marketAvg6: mAvgPct,
     c2: i === 0 ? clause2ForEngine() : null,
     volMet: i === 0 && clause3VolMet,
-    pe: null, pbr: null, mktPe: null, mktPbr: null, c6Assume: false,
+    pe: i === 0 ? pePredict(price) : null, pbr: i === 0 ? pbrPredict(price) : null, mktPe: peData?.mktPe ?? null, mktPbr: peData?.mktPbr ?? null, c6Assume: i === 0 && clause6Assume,
     sblRate: null, sblAmp: null, c12Assume: false,
   })
 
@@ -1086,9 +1100,34 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
               {clause3VolMet ? '☑ 假設當日量達標（已計入處置模擬）' : '☐ 假設當日量達標'}
             </button>
           )}
+          {/* 款六 — PE/PBR */}
+          {(() => {
+            const c6 = evalCard(0, simPrices[0] ?? startPrice).find(r => r.id === '6')
+            if (!c6) return null
+            const priceHit = c6.fired || c6.blocked
+            return (
+              <div className={`flex flex-col gap-1.5 border-t border-gray-800 pt-2 ${priceHit ? 'text-orange-300' : 'text-gray-500'}`}>
+                <div>
+                  {priceHit ? '✔' : '○'} <b className="text-base">款六（本益比/股淨比）</b>　{c6.detail}
+                </div>
+                {c6.blocked && (
+                  <button
+                    onClick={() => setClause6Assume(v => !v)}
+                    className={`self-start text-sm px-3 py-1.5 rounded-lg border transition-colors ${
+                      clause6Assume ? 'bg-orange-900/50 text-orange-200 border-orange-600'
+                                    : 'bg-gray-800 text-gray-300 border-gray-700 hover:border-gray-500'}`}>
+                    {clause6Assume ? '☑ 假設當日週轉率/券商集中達標（已計入處置模擬）' : '☐ 假設當日週轉率/券商集中達標'}
+                  </button>
+                )}
+                {c6.fired && (
+                  <span className="text-xs text-orange-400">（已勾選假設條件，計入處置模擬）</span>
+                )}
+              </div>
+            )
+          })()}
           {/* 待接 / 無資料 */}
           <div className="text-sm text-gray-500 border-t border-gray-800 pt-2">
-            ⏳ 待接 / 無資料：款四 週轉率&gt;10% ・ 款五 券商受託占比&gt;25% ・ 款六 本益比/股淨比 ・ 款七 券資比≥4倍
+            ⏳ 待接 / 無資料：款四 週轉率&gt;10% ・ 款五 券商受託占比&gt;25% ・ 款七 券資比≥4倍
           </div>
         </div>
       </div>
