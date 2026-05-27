@@ -109,12 +109,12 @@ const CLAUSE3_VOL_MULT = 5
 //   sumKnown = 基準日→計算日前一交易日各日漲跌%相加（已知 5 間隔）；prevClose = 計算日前一交易日收盤。
 // 差幅閘門：X 取「價格門檻%」與「全體均值+20%」較高者；mAvgPct=null 時退回純價格門檻。
 // 款一②「起迄價差 ≥ gap 元」仍以收盤差計：價 ≥ 基準日收盤 bp + gap。
-const thresh = (bp: number, prevClose: number, sumKnown: number, mkt: Market, mAvgPct?: number | null) => {
+const thresh = (bp: number, prevClose: number, sumKnown: number, spreadBase: number, mkt: Market, mAvgPct?: number | null) => {
   const { p1, p2, p3, gap } = MARKET_PCT[mkt]
   const diffPct  = mAvgPct != null ? mAvgPct + 20 : -Infinity          // 差幅閘門(全體+20%)
   const priceFor = (x: number) => prevClose * (1 + (x - sumKnown) / 100) // 達累積 x% 所需計算日收盤
   const t1 = nextTick(priceFor(Math.max(p1, diffPct)))
-  const t2 = Math.max(nextTick(priceFor(Math.max(p2, diffPct))), clTick(bp + gap))
+  const t2 = Math.max(nextTick(priceFor(Math.max(p2, diffPct))), clTick(spreadBase + gap))
   const t3 = nextTick(priceFor(Math.max(p3, diffPct)))
   return { t1, t2, t3 }
 }
@@ -170,8 +170,8 @@ function checkClause2(
 
 // 回傳注意 level：1=款一① 2=款一②（皆第一款）3=款三（第三款，價量異常）0=無
 // volumeMet：當日量是否達 5×60日均量（款三量條件）；僅最近一日（卡 0）有意義
-function nLvl(price: number, bp: number, prevClose: number, sumKnown: number, mkt: Market, mAvgPct?: number | null, volumeMet = false): 0|1|2|3 {
-  const { t1, t2, t3 } = thresh(bp, prevClose, sumKnown, mkt, mAvgPct)
+function nLvl(price: number, bp: number, prevClose: number, sumKnown: number, spreadBase: number, mkt: Market, mAvgPct?: number | null, volumeMet = false): 0|1|2|3 {
+  const { t1, t2, t3 } = thresh(bp, prevClose, sumKnown, spreadBase, mkt, mAvgPct)
   // 款一① 與 款一② 都屬「第一款」；① 門檻較嚴(高)優先判定
   if (price >= t1) return 1
   if (price >= t2) return 2
@@ -676,6 +676,8 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
   // 計算日前一交易日收盤（卡 0 = 最近實際收盤；卡 i>0 = 前一卡模擬價）
   const prevCloseOf = (i: number) =>
     closePath[i + OFFSET - 1] ?? closePath[closePath.length - 1] ?? startPrice
+  // 起迄價差基準 = 6 日窗口「第一天」收盤（= 基準日的下一交易日；對齊 attstock 的 startPrice）
+  const spreadBaseOf = (i: number) => closePath[i + 1] ?? closePath[i] ?? startPrice
 
   // 第二款（以實際匯入歷史股價判斷，含防重複豁免）
   const clause2 = checkClause2(priceHistory, pastNotices, market)
@@ -689,7 +691,7 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
   const notices: (0|1|2|3)[] = []
   for (let i = 0; i < days.length; i++) {
     if (simPrices[i] === null) break
-    notices.push(nLvl(simPrices[i]!, days[i].bp, prevCloseOf(i), knownSumOf(i), market, mAvgPct, i === 0 && clause3VolMet))
+    notices.push(nLvl(simPrices[i]!, days[i].bp, prevCloseOf(i), knownSumOf(i), spreadBaseOf(i), market, mAvgPct, i === 0 && clause3VolMet))
   }
 
   // 模擬是否觸發處置（以 baseReset 為起算）— 用於下方「此路徑安全/觸發」結果列
@@ -834,7 +836,7 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
             </thead>
             <tbody>
               {days.map((d, i) => {
-                const { t1, t2 } = thresh(d.bp, prevCloseOf(i), knownSumOf(i), market, mAvgPct)
+                const { t1, t2 } = thresh(d.bp, prevCloseOf(i), knownSumOf(i), spreadBaseOf(i), market, mAvgPct)
                 return (
                   <tr key={i} className="border-b border-gray-800/60">
                     <td className="py-2.5 pr-2 text-gray-400 text-sm whitespace-nowrap">{d.baseDateStr.slice(5)}</td>
@@ -910,13 +912,13 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
       {days.map((d, i) => {
         const prevClose0      = prevCloseOf(i)
         const sumKnown        = knownSumOf(i)
-        const { t1, t2 }      = thresh(d.bp, prevClose0, sumKnown, market, mAvgPct)
+        const { t1, t2 }      = thresh(d.bp, prevClose0, sumKnown, spreadBaseOf(i), market, mAvgPct)
         const { minP, maxP }  = getDayBounds(i, simPrices, days)
         const chosen          = simPrices[i]
         const prevUnset       = i > 0 && simPrices[i-1] === null
         const isUnset         = chosen === null
         const dispPrice       = isUnset ? (i === 0 ? startPrice : (simPrices[i-1] ?? startPrice)) : chosen
-        const nl              = isUnset ? null : nLvl(chosen, d.bp, prevClose0, sumKnown, market, mAvgPct, i === 0 && clause3VolMet)
+        const nl              = isUnset ? null : nLvl(chosen, d.bp, prevClose0, sumKnown, spreadBaseOf(i), market, mAvgPct, i === 0 && clause3VolMet)
         // 累積漲幅(逐日相加) = 已知 5 間隔相加 + 計算日當日漲跌%（同樣逐日 2 位無條件捨去）
         const pctChg          = (sumKnown + (prevClose0 > 0 ? trunc2((dispPrice - prevClose0) / prevClose0 * 100) : 0)).toFixed(2)
         // 日內漲幅 = 對比昨日收盤（即前一張卡的價格）
@@ -1028,7 +1030,7 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
   const clause3Panel = (() => {
     if (days.length === 0) return null
     const d0 = days[0]
-    const { t3 } = thresh(d0.bp, prevCloseOf(0), knownSumOf(0), market, mAvgPct)
+    const { t3 } = thresh(d0.bp, prevCloseOf(0), knownSumOf(0), spreadBaseOf(0), market, mAvgPct)
     const price0 = simPrices[0]
     const pricePast = price0 != null && price0 >= t3
     const volCeil   = avg60Vol != null ? Math.round(CLAUSE3_VOL_MULT * avg60Vol / 1000) : null
@@ -1180,7 +1182,7 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
             const fIdx     = focusIdx >= 0 ? focusIdx : days.length - 1
             const focusDay = days[fIdx]
             if (!focusDay) return null
-            const { t1, t2 } = thresh(focusDay.bp, prevCloseOf(fIdx), knownSumOf(fIdx), market, mAvgPct)
+            const { t1, t2 } = thresh(focusDay.bp, prevCloseOf(fIdx), knownSumOf(fIdx), spreadBaseOf(fIdx), market, mAvgPct)
             return (
               <div className="p-3 rounded-xl bg-gray-900 border border-gray-700 flex flex-wrap items-center gap-x-6 gap-y-1.5">
                 <div className="flex items-center gap-2">
