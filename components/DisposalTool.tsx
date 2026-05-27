@@ -680,18 +680,13 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
   // 第二款（以實際匯入歷史股價判斷，含防重複豁免）
   const clause2 = checkClause2(priceHistory, pastNotices, market)
 
-  // 6日窗口最低收盤(窗口=基準後的 OFFSET 天，含預測日；排除基準日本身) — 款十一起點
-  const windowMinOf = (i: number) => {
-    const w = closePath.slice(i + 1, i + OFFSET + 1).filter((v): v is number => v != null && v > 0)
-    return w.length ? Math.min(...w) : startPrice
-  }
   // 款二橋接：把既有 checkClause2 結果轉成引擎輸入
   const clause2ForEngine = () =>
     clause2.triggered ? { window: clause2.window!, pct: clause2.pct!, exempt: clause2.exempt } : null
   // 組裝單卡引擎輸入並評估（款六/十二 的當日資料 Task5/6 才接，這裡先給 null/false）
   const evalCard = (i: number, price: number): ClauseResult[] => evalClauses({
     market, prevClose: prevCloseOf(i), sumKnown: knownSumOf(i), price,
-    spreadBase: spreadBaseOf(i), windowMin: Math.min(windowMinOf(i), price),
+    spreadBase: spreadBaseOf(i),
     marketAvg6: mAvgPct,
     c2: i === 0 ? clause2ForEngine() : null,
     volMet: i === 0 && clause3VolMet,
@@ -976,7 +971,7 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
               </span>
               {(() => {
                 const g11 = gap11(market, dispPrice)
-                const t11 = clTick(windowMinOf(i)) + g11
+                const t11 = clTick(spreadBaseOf(i)) + g11
                 return (
                   <span title={`起迄價差≥${g11}元(收盤≥${market === 'TPEx' ? 300 : 500}每+${market === 'TPEx' ? 15 : 25}加級距) → 收盤約≥${fNum(t11)}`}
                     className="text-xs px-1.5 py-0.5 rounded bg-orange-950/60 text-orange-400 border border-orange-800/60">

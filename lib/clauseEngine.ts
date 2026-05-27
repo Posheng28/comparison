@@ -19,7 +19,6 @@ export interface ClauseInput {
   sumKnown: number
   price: number
   spreadBase: number
-  windowMin: number
   marketAvg6: number | null
   c2: { window: number; pct: number; exempt: boolean } | null
   volMet: boolean
@@ -62,7 +61,7 @@ function c3(inp: ClauseInput): ClauseResult {
 }
 function c11(inp: ClauseInput): ClauseResult {
   const g = gap11(inp.market, inp.price)
-  const spread = inp.price - inp.windowMin
+  const spread = inp.price - inp.spreadBase
   const fired = spread >= g
   return { id: '11', fired, first: false, detail: `起迄價差 ${spread.toFixed(2)} ≥${g}元` }
 }
