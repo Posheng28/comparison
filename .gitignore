@@ -54,4 +54,5 @@ next-env.d.ts
 
 # orphaned MI_QFIIS cache (fundStore removed)
 /.funddata/
+# 基金月/季報歷史（committed，SITCA 歷史抓不回來）：data/funds/ 不忽略
 Usersuser*.json
