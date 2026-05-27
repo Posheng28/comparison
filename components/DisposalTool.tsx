@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { evalClauses, summarize, type ClauseResult } from '@/lib/clauseEngine'
 
 /* ── Types ─────────────────────────────────────────────────────────────────── */
 interface DayEntry   { baseDateStr: string; bp: number }
@@ -210,7 +211,7 @@ function defaultDays(): DayEntry[] {
  * baseReset: 最近一次處置生效日（30交易日內），若有則從此日起算，不追溯之前
  */
 function computeTriggers(
-  notices: (0|1|2|3)[],
+  notices: { first: boolean; any: boolean }[],
   days: DayEntry[],
   pastNotices: PastNotice[],
   baseReset?: string,
@@ -238,15 +239,12 @@ function computeTriggers(
     }
   }
 
-  const all = [...prior, ...notices]; const pL = prior.length
+  const all = [...prior.map(l => ({ first: l === 1, any: l >= 1 })), ...notices]
+  const pL = prior.length
   let c1 = 0, ca = 0, t1 = -1, t2 = -1
   for (let i = 0; i < all.length; i++) {
-    const n = all[i]
-    const isPast = i < pL
-    // 第一款？模擬日的 level1/2 = 款一(①/②) 才算第一款；level3 = 款三(第三款) 不算。
-    //          歷史注意只有 level1 才是第一款，level2 代表款二～款八，不計入規則①
-    const isFirst = isPast ? (n === 1) : (n === 1 || n === 2)
-    const isAny   = n >= 1   // 任意注意（款一～款八，含款三）
+    const isFirst = all[i].first
+    const isAny   = all[i].any
     c1 = isFirst ? c1 + 1 : 0
     ca = isAny   ? ca + 1 : 0
     const si = i - pL
@@ -254,15 +252,15 @@ function computeTriggers(
   }
 
   // 10日 / 30日 視窗
-  const nm = new Map<string, 0|1|2|3>(filtPN.map(p => [p.dateStr, p.level as 0|1|2]))
+  const nm = new Map<string, boolean>(filtPN.map(p => [p.dateStr, true]))
   let t3 = -1, t4 = -1, lc10 = 0, lc30 = 0
   for (let i = 0; i < N; i++) {
-    nm.set(calcISO(days[i]), notices[i])
+    if (notices[i].any) nm.set(calcISO(days[i]), true)
     const lat = calcISO(days[i])
     const c10 = tdBetween(subTD(lat, 9), lat)
-      .filter(d => (!baseReset || d >= baseReset) && (nm.get(d)??0) > 0).length
+      .filter(d => (!baseReset || d >= baseReset) && nm.get(d) === true).length
     const c30 = tdBetween(subTD(lat, 29), lat)
-      .filter(d => (!baseReset || d >= baseReset) && (nm.get(d)??0) > 0).length
+      .filter(d => (!baseReset || d >= baseReset) && nm.get(d) === true).length
     lc10 = c10; lc30 = c30
     if (t3<0 && c10>=6)  t3 = i
     if (t4<0 && c30>=12) t4 = i
@@ -682,16 +680,35 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
   // 第二款（以實際匯入歷史股價判斷，含防重複豁免）
   const clause2 = checkClause2(priceHistory, pastNotices, market)
 
+  // 6日窗口最低收盤(窗口=基準後的 OFFSET 天，含預測日；排除基準日本身) — 款十一起點
+  const windowMinOf = (i: number) => {
+    const w = closePath.slice(i + 1, i + OFFSET + 1).filter((v): v is number => v != null && v > 0)
+    return w.length ? Math.min(...w) : startPrice
+  }
+  // 款二橋接：把既有 checkClause2 結果轉成引擎輸入
+  const clause2ForEngine = () =>
+    clause2.triggered ? { window: clause2.window!, pct: clause2.pct!, exempt: clause2.exempt } : null
+  // 組裝單卡引擎輸入並評估（款六/十二 的當日資料 Task5/6 才接，這裡先給 null/false）
+  const evalCard = (i: number, price: number): ClauseResult[] => evalClauses({
+    market, prevClose: prevCloseOf(i), sumKnown: knownSumOf(i), price,
+    spreadBase: spreadBaseOf(i), windowMin: Math.min(windowMinOf(i), price),
+    marketAvg6: mAvgPct,
+    c2: i === 0 ? clause2ForEngine() : null,
+    volMet: i === 0 && clause3VolMet,
+    pe: null, pbr: null, mktPe: null, mktPbr: null, c6Assume: false,
+    sblRate: null, sblAmp: null, c12Assume: false,
+  })
+
   // 處置生效日是否在最近30個交易日內？（以最近交易日為基準）
   const tdCutoff30 = subTD(todayTD, 29)
   const baseReset: string | undefined =
     lastDisposalDate && lastDisposalDate >= tdCutoff30 ? lastDisposalDate : undefined
 
   // 模擬注意序列
-  const notices: (0|1|2|3)[] = []
+  const notices: { first: boolean; any: boolean }[] = []
   for (let i = 0; i < days.length; i++) {
     if (simPrices[i] === null) break
-    notices.push(nLvl(simPrices[i]!, days[i].bp, prevCloseOf(i), knownSumOf(i), spreadBaseOf(i), market, mAvgPct, i === 0 && clause3VolMet))
+    notices.push(summarize(evalCard(i, simPrices[i]!)))
   }
 
   // 模擬是否觸發處置（以 baseReset 為起算）— 用於下方「此路徑安全/觸發」結果列
@@ -918,7 +935,9 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
         const prevUnset       = i > 0 && simPrices[i-1] === null
         const isUnset         = chosen === null
         const dispPrice       = isUnset ? (i === 0 ? startPrice : (simPrices[i-1] ?? startPrice)) : chosen
-        const nl              = isUnset ? null : nLvl(chosen, d.bp, prevClose0, sumKnown, spreadBaseOf(i), market, mAvgPct, i === 0 && clause3VolMet)
+        const rs              = isUnset ? [] : evalCard(i, chosen!)
+        const firedFirst      = rs.some(r => (r.id === '1①' || r.id === '1②') && r.fired)
+        const fired11         = rs.some(r => r.id === '11' && r.fired)
         // 累積漲幅(逐日相加) = 已知 5 間隔相加 + 計算日當日漲跌%（同樣逐日 2 位無條件捨去）
         const pctChg          = (sumKnown + (prevClose0 > 0 ? trunc2((dispPrice - prevClose0) / prevClose0 * 100) : 0)).toFixed(2)
         // 日內漲幅 = 對比昨日收盤（即前一張卡的價格）
@@ -930,11 +949,11 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
         const isTriggered     = simResult?.disposed && simResult.trigIdx === i
 
         const borderCls = isTriggered ? 'border-red-600 bg-red-950/30'
-          : isUnset            ? 'border-gray-700 opacity-70'
-          : (nl === 1 || nl === 2) ? 'border-red-500 bg-red-950/20'   // 款一①② 皆紅（第一款）
-          : nl === 3           ? 'border-orange-500 bg-orange-950/20' // 款三（第三款，價量異常）
-          :                      'border-green-600 bg-green-950/10'
-        const col = isUnset ? '#6b7280' : (nl===1 || nl===2) ? '#f87171' : nl===3 ? '#fb923c' : '#4ade80'
+          : isUnset      ? 'border-gray-700 opacity-70'
+          : firedFirst   ? 'border-red-500 bg-red-950/20'   // 款一①② 皆紅（第一款）
+          : fired11      ? 'border-orange-500 bg-orange-950/20' // 款十一
+          :                'border-green-600 bg-green-950/10'
+        const col = isUnset ? '#6b7280' : firedFirst ? '#f87171' : fired11 ? '#fb923c' : '#4ade80'
         const pd  = pctPos(t2, minP, maxP)
         const p1  = pctPos(t1, minP, maxP)
         const thumbPct = pctPos(isUnset ? snapTick((minP+maxP)/2) : chosen!, minP, maxP)
@@ -983,10 +1002,12 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
             <div className="min-h-[22px] flex items-center gap-1.5 flex-wrap">
               {isUnset ? <span className="text-xs text-gray-600">未設定</span> : (
                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full border
-                  ${(nl===1 || nl===2) ? 'bg-red-900/50 text-red-300 border-red-700'
-                  : nl===3   ? 'bg-orange-900/50 text-orange-300 border-orange-700'
-                  :            'bg-green-900/50 text-green-300 border-green-700'}`}>
-                  {nl===1 ? '🔴 款一①' : nl===2 ? '🔴 款一②' : nl===3 ? '🟠 款三' : '🟢 無注意'}
+                  ${firedFirst ? 'bg-red-900/50 text-red-300 border-red-700'
+                  : fired11   ? 'bg-orange-900/50 text-orange-300 border-orange-700'
+                  :              'bg-green-900/50 text-green-300 border-green-700'}`}>
+                  {firedFirst
+                    ? (rs.some(r => r.id === '1①' && r.fired) ? '🔴 款一①' : '🔴 款一②')
+                    : fired11 ? '🟠 款十一' : '🟢 無注意'}
                 </span>
               )}
               {isTriggered && <span className="text-xs text-red-400 font-bold">⚠️ 觸發</span>}
