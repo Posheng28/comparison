@@ -34,7 +34,7 @@
 #### 差幅 ≥ 20% 條件（已部分實作，2026/05）
 法規款一①② **逐字**：漲幅與**全體 _及_ 同類**差幅**_均_ ≥ 20%**（AND）。
 - **全體差幅已納入**：用 `/api/market-avg` 取全體累積漲幅 `mAvgPct`，門檻改為 `max(價格門檻, mAvgPct+20%)`。
-  - `thresh(prevClose, mkt, knownSum, mAvgPct, spreadBase)`：`diffPct = mAvgPct+20`；`t1=nextTick(prevClose×(1+(max(p1,diffPct)−knownSum)/100))`、`t2=max(nextTick(prevClose×(1+(max(p2,diffPct)−knownSum)/100)), clTick(spreadBase+gap))`。
+  - `thresh(bp, prevClose, sumKnown, spreadBase, mkt, mAvgPct)`：`diffPct = mAvgPct+20`；`t1=nextTick(prevClose×(1+(max(p1,diffPct)−sumKnown)/100))`、`t2=max(nextTick(prevClose×(1+(max(p2,diffPct)−sumKnown)/100)), clTick(spreadBase+gap))`（`bp` 僅為呼叫對稱保留，價差改用 `spreadBase`）。
   - 市場平靜時門檻 = 價格門檻（不變）；大盤一熱，差幅門檻 > 價格門檻 → 注意門檻自動升。
   - `mAvgPct=null`（未載入/取不到）→ 退回純價格門檻。貫穿卡片/表格/滑桿判色/處置模擬（`computeTriggers`）。
 - **上市/上櫃分開**：上市股比上市全體、上櫃股比上櫃全體。`mAvgPct = marketAvg[market]`，三者綁同一 `market`。
