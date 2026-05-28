@@ -4,6 +4,7 @@ import MovesView from './MovesView'
 import StrategiesView from './StrategiesView'
 import HoldingsView from './HoldingsView'
 import DnaView from './DnaView'
+import FlowView from './FlowView'
 
 type SectionId = '01' | '02' | '03' | '04' | '05' | '06'
 
@@ -81,7 +82,7 @@ export default function FundShell() {
       case '03': return <HoldingsView />
       case '04': return <StrategiesView />
       case '05': return <DnaView />
-      case '06': return <PlaceholderCard label="資金流" />
+      case '06': return <FlowView />
     }
   }
 
