@@ -3,6 +3,7 @@ import { useState } from 'react'
 import MovesView from './MovesView'
 import StrategiesView from './StrategiesView'
 import HoldingsView from './HoldingsView'
+import DnaView from './DnaView'
 
 type SectionId = '01' | '02' | '03' | '04' | '05' | '06'
 
@@ -58,7 +59,7 @@ export default function FundShell() {
       case '02': return <HoldingsView />
       case '03': return <HoldingsView />
       case '04': return <StrategiesView />
-      case '05': return <PlaceholderCard label="經理人" />
+      case '05': return <DnaView />
       case '06': return <PlaceholderCard label="資金流" />
     }
   }

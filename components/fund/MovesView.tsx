@@ -92,6 +92,8 @@ function ConsensusBar({ up, down }: { up: number; down: number }) {
 }
 
 // ── StockRow ─────────────────────────────────────────────────────────────────
+// Flex card: top row = accent-tick | glyph | code+name | count+delta (never clips)
+//            bottom row = fund slugs (allowed to ellipsis)
 
 function StockRow({
   agg,
@@ -111,51 +113,71 @@ function StockRow({
   const isTop3 = rank <= 3
 
   return (
-    <tr
-      style={{ borderTop: '1px solid var(--line)', transition: 'background 0.1s' }}
+    <div
+      style={{
+        borderTop: '1px solid var(--line)',
+        padding: '7px 10px',
+        transition: 'background 0.1s',
+        cursor: 'default',
+      }}
       onMouseEnter={e => {
-        (e.currentTarget as HTMLTableRowElement).style.background = 'var(--panel2)'
+        (e.currentTarget as HTMLDivElement).style.background = 'var(--panel2)'
       }}
       onMouseLeave={e => {
-        (e.currentTarget as HTMLTableRowElement).style.background = 'transparent'
+        (e.currentTarget as HTMLDivElement).style.background = 'transparent'
       }}
     >
-      {/* Accent tick for top 3 */}
-      <td style={{ padding: '7px 0 7px 10px', width: 16, verticalAlign: 'middle' }}>
-        {isTop3 && (
-          <span
-            style={{
-              display: 'inline-block',
-              width: 2,
-              height: 16,
-              background: 'var(--accent)',
-              borderRadius: 1,
-              verticalAlign: 'middle',
-            }}
-          />
-        )}
-      </td>
-      {/* Glyph */}
-      <td style={{ padding: '7px 6px', verticalAlign: 'middle', width: 18 }}>
-        <span style={{ color: glyphColor, fontSize: '0.72rem' }}>{glyph}</span>
-      </td>
-      {/* Code + Name */}
-      <td style={{ padding: '7px 8px 7px 0', verticalAlign: 'middle', minWidth: 100 }}>
+      {/* Top row: fixed-size items + code+name (grows) + count+delta (shrink-0) */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        {/* Accent tick for top 3 */}
         <span
           style={{
-            fontFamily: 'var(--font-geist-mono, ui-monospace, monospace)',
-            fontVariantNumeric: 'tabular-nums',
-            color: 'var(--txt)',
-            fontSize: '0.82rem',
-            marginRight: 6,
+            display: 'inline-block',
+            width: 2,
+            height: 16,
+            background: isTop3 ? 'var(--accent)' : 'transparent',
+            borderRadius: 1,
+            flexShrink: 0,
+          }}
+        />
+        {/* Glyph */}
+        <span style={{ color: glyphColor, fontSize: '0.72rem', flexShrink: 0 }}>{glyph}</span>
+        {/* Code + Name — allowed to shrink but not clip the numbers on the right */}
+        <span
+          style={{
+            flex: 1,
+            minWidth: 0,
+            display: 'flex',
+            alignItems: 'baseline',
+            gap: 5,
+            overflow: 'hidden',
           }}
         >
-          {agg.code}
+          <span
+            style={{
+              fontFamily: 'var(--font-geist-mono, ui-monospace, monospace)',
+              fontVariantNumeric: 'tabular-nums',
+              color: 'var(--txt)',
+              fontSize: '0.82rem',
+              flexShrink: 0,
+            }}
+          >
+            {agg.code}
+          </span>
+          <span
+            style={{
+              color: 'var(--txt-dim)',
+              fontSize: '0.8rem',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              minWidth: 0,
+            }}
+          >
+            {agg.name}
+          </span>
         </span>
-        <span style={{ color: 'var(--txt-dim)', fontSize: '0.8rem' }}>{agg.name}</span>
-      </td>
-      {/* Count badge */}
-      <td style={{ padding: '7px 8px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+        {/* Count badge — never shrinks */}
         <span
           style={{
             fontWeight: 700,
@@ -163,13 +185,13 @@ function StockRow({
             fontSize: '0.8rem',
             fontFamily: 'var(--font-geist-mono, ui-monospace, monospace)',
             fontVariantNumeric: 'tabular-nums',
+            flexShrink: 0,
+            whiteSpace: 'nowrap',
           }}
         >
           {count} 檔
         </span>
-      </td>
-      {/* Delta */}
-      <td style={{ padding: '7px 8px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+        {/* Delta — never shrinks */}
         <span
           style={{
             color: deltaColor,
@@ -177,25 +199,25 @@ function StockRow({
             fontVariantNumeric: 'tabular-nums',
             fontSize: '0.8rem',
             fontWeight: 500,
+            flexShrink: 0,
+            whiteSpace: 'nowrap',
           }}
         >
           {fmtDelta(agg.totalDelta)}
         </span>
-      </td>
-      {/* Bar */}
-      <td style={{ padding: '7px 8px', verticalAlign: 'middle', whiteSpace: 'nowrap' }}>
+        {/* Consensus bar */}
         <ConsensusBar up={agg.upCount} down={agg.downCount} />
-      </td>
-      {/* Fund slugs */}
-      <td style={{ padding: '7px 10px 7px 4px', verticalAlign: 'middle', maxWidth: 200 }}>
+      </div>
+      {/* Bottom row: fund slugs — only this is allowed to ellipsis */}
+      <div style={{ paddingLeft: 14, marginTop: 2, minWidth: 0, overflow: 'hidden' }}>
         <FundSlugs
           add={agg.addFunds}
           enter={agg.enterFunds}
           reduce={agg.reduceFunds}
           exit={agg.exitFunds}
         />
-      </td>
-    </tr>
+      </div>
+    </div>
   )
 }
 
@@ -275,13 +297,9 @@ function Panel({
 
       {!loading && rows.length > 0 && (
         <div style={{ overflowY: 'auto', flex: 1 }}>
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <tbody>
-              {rows.map((agg, i) => (
-                <StockRow key={agg.code} agg={agg} direction={direction} rank={i + 1} />
-              ))}
-            </tbody>
-          </table>
+          {rows.map((agg, i) => (
+            <StockRow key={agg.code} agg={agg} direction={direction} rank={i + 1} />
+          ))}
         </div>
       )}
     </div>
@@ -385,8 +403,14 @@ export default function MovesView() {
         </div>
       )}
 
-      {/* Two panels side by side */}
-      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
+      {/* Two panels side by side — stacks to single column below ~660px */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+          gap: 16,
+        }}
+      >
         <Panel
           title="加碼／新進"
           underlineColor="var(--up)"
