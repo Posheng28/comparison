@@ -3,25 +3,36 @@ import type { FundSnapshot, FundHolding } from '../types'
 
 const DATE_RE = /20\d\d[\/.\-]\d{1,2}[\/.\-]\d{1,2}/
 
+// Supported market suffixes in holding link text, e.g. "台積電(2330.TW)" or "NVIDIA(NVDA.US)"
+const HOLDING_RE = /^(.+?)\(([A-Za-z0-9]+)\.(TW|US|HK|JP|KS|SS|SZ|SH)\)\s*$/
+
 export function parseMoneyDJEtf(html: string, fundId: string): FundSnapshot {
   const $ = cheerio.load(html)
 
+  // Scope to the main holdings table (id ends with "stable3", class "datalist").
+  // This avoids picking up rows from other tables on the page (sector, related ETFs, etc.).
+  const mainTable = $('table#ctl00_ctl00_MainContent_MainContent_stable3')
+  const rowSelector = mainTable.length > 0 ? mainTable.find('tr') : $('tr')
+
   // Locate all rows that contain both td.col05 and td.col06
-  const rows = $('tr').filter((_, el) => $(el).find('td.col05').length > 0 && $(el).find('td.col06').length > 0)
+  const rows = rowSelector.filter((_, el) => $(el).find('td.col05').length > 0 && $(el).find('td.col06').length > 0)
   if (rows.length === 0) throw new Error(`MoneyDJ ${fundId}: no holdings rows`)
 
   const holdings: FundHolding[] = []
   rows.each((_, el) => {
     const $r = $(el)
     const linkText = $r.find('td.col05 a').first().text().trim()
-    // Match Taiwan-listed stocks only: e.g. "台積電(2330.TW)"
-    const m = linkText.match(/^(.+?)\((\d{4,6}[A-Z]?)\.TW\)\s*$/)
+    // Match stocks across all supported markets: TW, US, HK, JP, KS (Korea), SS/SZ (China)
+    const m = linkText.match(HOLDING_RE)
     if (!m) return
     const name = m[1].trim()
     const code = m[2].trim()
+    const market = m[3]
     const weightPct = Number($r.find('td.col06').first().text().trim())
     if (Number.isNaN(weightPct)) return
-    holdings.push({ code, name, weightPct, rank: holdings.length + 1 })
+    const holding: FundHolding = { code, name, weightPct, rank: holdings.length + 1 }
+    if (market !== 'TW') holding.market = market
+    holdings.push(holding)
   })
 
   if (!holdings.length) throw new Error(`MoneyDJ ${fundId}: zero parsed holdings`)
