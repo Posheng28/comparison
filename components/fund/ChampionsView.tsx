@@ -7,7 +7,7 @@ import type { FundSnapshot } from '@/lib/fund/types'
 
 interface RankData {
   top7: RankRow[]
-  fetchedAt: string
+  asOf: string
 }
 
 interface FundData {
@@ -486,7 +486,7 @@ export default function ChampionsView() {
         </div>
         {rankData && (
           <div style={{ alignSelf: 'center', border: '1px solid var(--accent)', borderRadius: 20, padding: '3px 12px', fontFamily: 'var(--font-geist-mono, ui-monospace, monospace)', fontVariantNumeric: 'tabular-nums', fontSize: '0.78rem', color: 'var(--accent)', whiteSpace: 'nowrap' }}>
-            data: {rankData.fetchedAt.slice(0, 10)}
+            data: {rankData.asOf}
           </div>
         )}
       </div>
