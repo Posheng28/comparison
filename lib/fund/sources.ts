@@ -21,7 +21,7 @@ export function slugBySitca(code: string): string | undefined {
 }
 
 export const FUNDS: FundDef[] = [
-  { fundId: 'uni-allweather',        kind: 'fund', company: 'uni',     sitcaCode: 'A09002', relatedEtf: '00988A', crawl: 'sitca' },
+  { fundId: 'uni-allweather',        kind: 'fund', company: 'uni',     sitcaCode: 'A09002', crawl: 'sitca' },
   { fundId: 'uni-benteng',           kind: 'fund', company: 'uni',     sitcaCode: 'A09012', relatedEtf: '00981A', crawl: 'sitca' },
   { fundId: 'uni-blackhorse',        kind: 'fund', company: 'uni',     sitcaCode: 'A09003', crawl: 'sitca' },
   { fundId: 'uni-sme',               kind: 'fund', company: 'uni',     sitcaCode: 'A09011', crawl: 'sitca' },
@@ -31,7 +31,7 @@ export const FUNDS: FundDef[] = [
   { fundId: 'nomura-quality',        kind: 'fund', company: 'nomura',  sitcaCode: 'A32001', crawl: 'sitca' },
   { fundId: 'nomura-hitech',         kind: 'fund', company: 'nomura',  sitcaCode: 'A32',    crawl: 'sitca' },
   { fundId: 'allianz-dabar',         kind: 'fund', company: 'allianz', sitcaCode: 'A36001', crawl: 'sitca' },
-  { fundId: 'allianz-tech',          kind: 'fund', company: 'allianz', sitcaCode: 'A36004', relatedEtf: '00993A', crawl: 'sitca' },
+  { fundId: 'allianz-tech',          kind: 'fund', company: 'allianz', sitcaCode: 'A36004', crawl: 'sitca' },
   { fundId: 'taishin-mainstream',    kind: 'fund', company: 'taishin', sitcaCode: 'A47',    crawl: 'sitca' },
   { fundId: 'yuanta-newmain',        kind: 'fund', company: 'yuanta',  sitcaCode: 'A05',    crawl: 'sitca' },
 ]
@@ -40,9 +40,10 @@ export const ETFS: FundDef[] = [
   { fundId: '00980A', kind: 'etf', company: 'nomura',  etfTicker: '00980A', crawl: 'moneydj' },
   { fundId: '00981A', kind: 'etf', company: 'uni',     etfTicker: '00981A', crawl: 'moneydj' },
   { fundId: '00982A', kind: 'etf', company: 'capital', etfTicker: '00982A', crawl: 'moneydj' },
-  { fundId: '00988A', kind: 'etf', company: 'uni',     etfTicker: '00988A', crawl: 'moneydj' },
+  { fundId: '00984A', kind: 'etf', company: 'allianz', etfTicker: '00984A', crawl: 'moneydj' },
+  { fundId: '00986A', kind: 'etf', company: 'taishin', etfTicker: '00986A', crawl: 'moneydj' },
+  { fundId: '00990A', kind: 'etf', company: 'ctbc',    etfTicker: '00990A', crawl: 'moneydj' },
   { fundId: '00991A', kind: 'etf', company: 'fuhua',   etfTicker: '00991A', crawl: 'moneydj' },
-  { fundId: '00993A', kind: 'etf', company: 'allianz', etfTicker: '00993A', crawl: 'moneydj' },
 ]
 
 export const ALL_DEFS: FundDef[] = [...FUNDS, ...ETFS]

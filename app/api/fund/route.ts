@@ -53,9 +53,11 @@ export async function GET(req: NextRequest) {
   }
 
   if (fundId) {
+    const def = defById(fundId)
     const monthly = await latest(fundId, 'monthly_top10')
     const quarterly = await latest(fundId, 'quarterly_full')
-    return NextResponse.json({ def: defById(fundId), monthly, quarterly })
+    const etfDaily = def?.kind === 'etf' ? await latest(fundId, 'etf_daily') : null
+    return NextResponse.json({ def, monthly, quarterly, etfDaily })
   }
   if (stock) {
     const all: FundSnapshot[] = []

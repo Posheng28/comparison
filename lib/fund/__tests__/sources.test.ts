@@ -2,9 +2,9 @@ import { describe, it, expect } from 'vitest'
 import { FUNDS, ETFS, ALL_DEFS, slugBySitca } from '../sources'
 
 describe('fund registry', () => {
-  it('有 13 檔基金、6 檔 ETF', () => {
+  it('有 13 檔基金、7 檔 ETF', () => {
     expect(FUNDS).toHaveLength(13)
-    expect(ETFS).toHaveLength(6)
+    expect(ETFS).toHaveLength(7)
   })
   it('fundId 全域唯一', () => {
     const ids = ALL_DEFS.map(d => d.fundId)

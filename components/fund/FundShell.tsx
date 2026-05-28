@@ -5,8 +5,9 @@ import StrategiesView from './StrategiesView'
 import HoldingsView from './HoldingsView'
 import DnaView from './DnaView'
 import FlowView from './FlowView'
+import ChampionsView from './ChampionsView'
 
-type SectionId = '01' | '02' | '03' | '04' | '05' | '06'
+type SectionId = '01' | '02' | '03' | '04' | '05' | '06' | '07'
 
 interface NavItem {
   id: SectionId
@@ -21,6 +22,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: '04', index: '04', label: '策略' },
   { id: '05', index: '05', label: '經理人' },
   { id: '06', index: '06', label: '資金流' },
+  { id: '07', index: '07', label: '冠軍' },
 ]
 
 const NARROW_BREAKPOINT = 720
@@ -83,6 +85,7 @@ export default function FundShell() {
       case '04': return <StrategiesView />
       case '05': return <DnaView />
       case '06': return <FlowView />
+      case '07': return <ChampionsView />
     }
   }
 
