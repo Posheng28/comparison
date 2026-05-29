@@ -1,6 +1,6 @@
 import type { FundSnapshot } from './types'
 
-export type MoveKind = 'add' | 'reduce' | 'enter' | 'exit'
+type MoveKind = 'add' | 'reduce' | 'enter' | 'exit'
 
 export interface FundMove {
   code: string

@@ -1,5 +1,5 @@
 export type Market = 'TWSE' | 'TPEx'
-export type ClauseId = '1①' | '1②' | '2' | '3' | '6' | '11' | '12'
+type ClauseId = '1①' | '1②' | '2' | '3' | '6' | '11' | '12'
 export interface ClauseResult { id: ClauseId; fired: boolean; first: boolean; detail: string; blocked?: boolean }
 
 const trunc2 = (x: number) => { const v = Math.round(x * 1e8) / 1e8; return Math.trunc(v * 100) / 100 }

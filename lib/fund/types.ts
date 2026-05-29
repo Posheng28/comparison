@@ -1,5 +1,5 @@
 export type ReportType = 'etf_daily'
-export type CrawlStrategy = 'moneydj' | 'none'
+type CrawlStrategy = 'moneydj' | 'none'
 
 export interface FundHolding {
   code: string

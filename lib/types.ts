@@ -1,4 +1,4 @@
-export type AxisSide  = 'left' | 'right'
+type AxisSide  = 'left' | 'right'
 export type ChartType = 'line' | 'area' | 'bar'
 
 export interface SeriesConfig {
@@ -18,7 +18,7 @@ export interface SeriesConfig {
   error?: string
 }
 
-export interface DataPoint {
+interface DataPoint {
   date: string
   value: number | null
 }

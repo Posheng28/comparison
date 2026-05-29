@@ -8,12 +8,12 @@ import type { FundSnapshot } from './types'
 //   - 跨 ETF 在同一日加總
 // 慣例：紅(up)=加碼(正)、綠(down)=減碼(負)，與台股漲跌色一致。
 
-export interface FlowContributor {
+interface FlowContributor {
   fundId: string
   delta: number   // 該 ETF 當日股數變動（+加碼 / -減碼）
 }
 
-export interface FlowPoint {
+interface FlowPoint {
   date: string            // 變動發生日（後一個快照日，YYYY-MM-DD）
   netShares: number       // 跨 ETF 淨變動股數
   addShares: number       // 當日加碼總股數（>= 0）

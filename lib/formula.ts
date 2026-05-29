@@ -122,7 +122,7 @@ export function evaluateFormula(formula: string, vars: Record<string, number | n
 }
 
 // Return all series IDs referenced in a formula
-export function extractIds(formula: string): string[] {
+function extractIds(formula: string): string[] {
   try {
     const toks = tokenize(formula)
     return toks.filter((t) => t.type === 'id').map((t) => t.raw)
