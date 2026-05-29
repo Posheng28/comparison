@@ -32,7 +32,7 @@
 - 款一①② **都屬第一款**，都計入「連 3 日 → 處置」。
 - `MARKET_PCT`（百分比）：TWSE `{p1:32, p2:25, p3:25, gap:50}`、TPEx `{p1:30, p2:23, p3:27, gap:40}`。
 
-#### 差幅 ≥ 20% 條件（已部分實作，2026/05）
+#### 差幅 ≥ 20% 條件（2026/05 全體 + 同類均已完成）
 法規款一①② **逐字**：漲幅與**全體 _及_ 同類**差幅**_均_ ≥ 20%**（AND）。
 - **全體差幅已納入**：用 `/api/market-avg` 取全體累積漲幅 `mAvgPct`，門檻改為 `max(價格門檻, mAvgPct+20%)`。
   - `thresh(bp, prevClose, sumKnown, spreadBase, mkt, mAvgPct)`：`diffPct = mAvgPct+20`；`t1=nextTick(prevClose×(1+(max(p1,diffPct)−sumKnown)/100))`、`t2=max(nextTick(prevClose×(1+(max(p2,diffPct)−sumKnown)/100)), clTick(spreadBase+gap))`（`bp` 僅為呼叫對稱保留，價差改用 `spreadBase`）。
@@ -40,7 +40,10 @@
   - `mAvgPct=null`（未載入/取不到）→ 退回純價格門檻。貫穿卡片/表格/滑桿判色/處置模擬（`computeTriggers`）。
 - **上市/上櫃分開**：上市股比上市全體、上櫃股比上櫃全體。`mAvgPct = marketAvg[market]`，三者綁同一 `market`。
 - **當日（第 6 間隔）全體漲幅以 0% 計**（無法預測 → 假設）；故 `mAvgPct` = 「已知 5 間隔」值即等於「6 日窗口當日=0」的結果。
-- **同類差幅仍無產業資料、未驗證** → 結果為估計（UI 已標註）。**未來若接產業分類可補上同類那半條**。
+- **款一①②、款三差幅閘 = max(全體均值, 同類均值) + 20（2026/05/29 完成）**：全體/同類均值皆「自算個股等權累積漲幅、排除標的本身」；上市/上櫃同口徑（上櫃已從櫃買指數加權改為個股等權）。
+  - 新端點 `GET /api/sectoravg?market&code&win`：回 `{ targetCum, marketAvg, sectorAvg, sectorCode }`，均值皆排除標的本身。
+  - 共用資料層 `lib/disposal/marketData.ts`（`fetchTwseDailyPct` / `fetchTpexDailyPct` / `fetchSectorMap` / `cumulativeMap` / `eqAvg`）。
+  - 對拍 attstock 黃金值（窗口 5/22~28）：國巨 2327 累積 = 27.36；同類（產業別 28、排除國巨）= 6.15；全體（排除國巨）= 2.22，已固化為 `lib/disposal/__tests__/golden.test.ts` 回歸測試。
 
 ### 第三款（價量同時異常）— 已實作於原子引擎
 - 條件：6 日累積漲幅 > **25%（上市）/ 27%（上櫃）** + 全體差幅 ≥ 20% + 當日量 ≥ **5×最近 60 日均量**。
@@ -72,7 +75,7 @@
 
 **處置計數對應**：第一款計規則①（連3日）；款一~十二任一計規則②③④（連5日6次/10日6次/30日12次）。
 
-### 各款可算性現況（差幅一律「全體 AND 同類 均 ≥20%」；同類產業均值無資料，標估計）
+### 各款可算性現況（差幅一律「全體 AND 同類 均 ≥20%」；全體/同類均值皆自算等權、排除標的；上市/上櫃同口徑）
 - **✅ 已實作（`lib/clauseEngine.ts`）**：款一①②、款二（純價格、含豁免）、款三（價+量+假設）、款六（PE/PBR+假設）、款十一（起迄價差）、款十二（借券+假設）。
 - **❌ 資料卡死、UI 標「資料不足」**：
   - 款四 週轉率：分母需「流通在外股數」，`發行股數` 算出差 ~3 倍；無免費批量 API（TDCC/MOPS 僅個別查詢）。
@@ -130,14 +133,15 @@
 | `notices/route.ts` | 注意紀錄 | TWSE `rwd/zh/announcement/notice`；TPEx `www/zh-tw/bulletin/attention`（直接回 JSON `tables[0].data`） |
 | `disposal/route.ts` | 單股處置 | **TWSE 是 `announcement/punish`**（不是 disposal！）；**TPEx 是 `bulletin/disposal`**（不是 disposition！） |
 | `disposal-list/route.ts` | 全市場處置清單 | 同上兩個 URL，不帶 code |
-| `market-avg/route.ts` | 全體均值（款一差幅 ≥ 20% 基底）；**上市/上櫃算法不同**：上市=普通股等權、上櫃=櫃買指數 | 見下方專段 |
+| `market-avg/route.ts` | 全體均值（款一差幅 ≥ 20% 基底）；**上市/上櫃同口徑**（皆個股等權累積漲幅平均，上櫃已從櫃買指數加權改為個股等權）| 見下方專段 |
+| `sectoravg/route.ts` | 同類/全體均值（款一①②、款三差幅閘）；回 `targetCum/marketAvg/sectorAvg/sectorCode`，均值排除標的本身 | `lib/disposal/marketData.ts` |
 
-### `market-avg` — 全體累積漲幅（差幅 ≥ 20% 用）⚠️ 上市/上櫃兩套算法
-- **上市 = 全體普通股「逐日漲跌%(2 位無條件捨去) 相加」再等權(簡單)平均**（**非** TAIEX 指數）。逐檔抓 `twse.com.tw/exchangeReport/MI_INDEX?response=json&date=YYYYMMDD&type=ALLBUT0999`（`row[0]`=代號、`row[8]`=收盤、`row[9]`=漲跌方向(green=跌)、`row[10]`=漲跌價差），只取普通股 `[1-9]\d{3}`，6 日窗口交集後等權平均（`fetchTwseStocks`+`twseEqAvg`，含重試避免掉檔）。
-- **上櫃 = 櫃買指數(發行量加權) 逐日漲跌% 相加(全精度)**。`tpex.org.tw/openapi/v1/tpex_index`（`{Date:YYYYMMDD, Close}`，近一個月）。
+### `market-avg` — 全體累積漲幅（差幅 ≥ 20% 用）上市/上櫃同口徑（2026/05/29 起）
+- **上市 = 全體普通股「逐日漲跌%(2 位無條件捨去) 相加」再等權(簡單)平均**（**非** TAIEX 指數）。逐檔抓 `twse.com.tw/exchangeReport/MI_INDEX?response=json&date=YYYYMMDD&type=ALLBUT0999`（`row[0]`=代號、`row[8]`=收盤、`row[9]`=漲跌方向(green=跌)、`row[10]`=漲跌價差），只取普通股 `[1-9]\d{3}`，6 日窗口交集後等權平均（`fetchTwseDailyPct`+`eqAvg`，含重試避免掉檔）。
+- **上櫃 = 個股等權累積漲幅平均**（**已從舊版「櫃買指數加權」改為與上市同口徑**）。逐檔抓 `tpex.org.tw` 每日收盤（`afterTrading/dailyQuotes?date=ROC&type=EW&response=json`，`tables[0].data`：col0=代號、col2=收盤、col3=漲跌帶號），6 日窗口交集後等權平均（`fetchTpexDailyPct`+`eqAvg`）。
 - 上市交易日窗口用 TAIEX `MI_5MINS_HIST?response=json&date=YYYYMMDD`（ROC 日期、`row[4]`=收盤指數）定出，再對那 6 日逐檔抓個股。
 - **窗口**由 `?date=`（個股最近收盤日）決定，取 ≤ 該日最近 **6** 交易日（**5** 間隔）。回傳 `{ knownIntervals, baseDate, lastClosedDate, twse:{avg}, tpex:{avg} }`；`avg` 取不到為 `null`（個股端退回純價格門檻）。結果快取 6h（key=endYMD），`bust=1` 清。
-- **對拍 attstock（2026/05, 5/19→5/26）**：上櫃 9.98（=櫃買指數，本工具一致）；上市 attstock=4.99、本工具普通股等權=**5.24**，差 ~0.25 推測為 attstock 的「全體上市」**排除已被注意/處置的極端漲幅股**（無法從外部精確還原其清單）；此 0.25 對差幅閘門（mAvg+20）幾乎不影響觸發。
+- **對拍 attstock 新版黃金值（2026/05, 窗口5/22~28）**：國巨 2327 累積 = 27.36；同類（產業別28、排除國巨）= 6.15；全體（排除國巨）= 2.22。已固化為 `lib/disposal/__tests__/golden.test.ts` 回歸測試。
 
 ### 處置 API 欄位對應（重要）
 - **TWSE punish**：`row[2]`=代號、`row[3]`=名稱、`row[6]`=處置起迄時間（斜線格式 `115/05/08～115/05/21`）
