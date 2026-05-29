@@ -110,9 +110,10 @@ const CLAUSE3_VOL_MULT = 5
 //   sumKnown = 基準日→計算日前一交易日各日漲跌%相加（已知 5 間隔）；prevClose = 計算日前一交易日收盤。
 // 差幅閘門：X 取「價格門檻%」與「全體均值+20%」較高者；mAvgPct=null 時退回純價格門檻。
 // 款一②「起迄價差 ≥ gap 元」仍以收盤差計：價 ≥ 基準日收盤 bp + gap。
-const thresh = (bp: number, prevClose: number, sumKnown: number, spreadBase: number, mkt: Market, mAvgPct?: number | null) => {
+const thresh = (bp: number, prevClose: number, sumKnown: number, spreadBase: number, mkt: Market, mAvgPct?: number | null, sAvgPct?: number | null) => {
   const { p1, p2, p3, gap } = MARKET_PCT[mkt]
-  const diffPct  = mAvgPct != null ? mAvgPct + 20 : -Infinity          // 差幅閘門(全體+20%)
+  const cands = [mAvgPct, sAvgPct].filter((x): x is number => x != null)
+  const diffPct  = cands.length ? Math.max(...cands) + 20 : -Infinity   // 差幅閘門(全體/同類較高者+20%)
   const priceFor = (x: number) => prevClose * (1 + (x - sumKnown) / 100) // 達累積 x% 所需計算日收盤
   const t1 = nextTick(priceFor(Math.max(p1, diffPct)))
   const t2 = Math.max(nextTick(priceFor(Math.max(p2, diffPct))), clTick(spreadBase + gap))
@@ -171,8 +172,8 @@ function checkClause2(
 
 // 回傳注意 level：1=款一① 2=款一②（皆第一款）3=款三（第三款，價量異常）0=無
 // volumeMet：當日量是否達 5×60日均量（款三量條件）；僅最近一日（卡 0）有意義
-function nLvl(price: number, bp: number, prevClose: number, sumKnown: number, spreadBase: number, mkt: Market, mAvgPct?: number | null, volumeMet = false): 0|1|2|3 {
-  const { t1, t2, t3 } = thresh(bp, prevClose, sumKnown, spreadBase, mkt, mAvgPct)
+function nLvl(price: number, bp: number, prevClose: number, sumKnown: number, spreadBase: number, mkt: Market, mAvgPct?: number | null, volumeMet = false, sAvgPct?: number | null): 0|1|2|3 {
+  const { t1, t2, t3 } = thresh(bp, prevClose, sumKnown, spreadBase, mkt, mAvgPct, sAvgPct)
   // 款一① 與 款一② 都屬「第一款」；① 門檻較嚴(高)優先判定
   if (price >= t1) return 1
   if (price >= t2) return 2
@@ -357,6 +358,8 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
   const [marketAvg, setMarketAvg] = useState<{
     TWSE: number | null; TPEx: number | null; baseDate?: string; lastClosedDate?: string
   }>({ TWSE: null, TPEx: null })
+  // 同類/全體均值（匯入個股後，用個股實際 6 日窗口自算；排除標的本身）
+  const [sectorAvg, setSectorAvg] = useState<{ sectorAvg: number | null; marketAvg: number | null; sectorCode: string | null; targetCum: number | null } | null>(null)
   useEffect(() => {
     let cancelled = false
     // 失敗或上市/上櫃任一 avg 為 null（暫時性，如全市場資料被限流）時重試，避免卡在「載入中」
@@ -459,6 +462,13 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
             const ampYMDs = all.slice(-20).map(d => d.date.replace(/-/g,''))
             fetch(`/api/sbl?market=${json.market}&code=${code}&win=${winYMDs.join(',')}&amp=${ampYMDs.join(',')}`).then(r=>r.json()).then(setSblData).catch(()=>setSblData(null))
           }
+          // 同類/全體均值：用近 6 日的「最近 5 個 interval 日」(= days.slice(1)) 作窗口
+          {
+            const winYMDs = all.slice(-5).map(d => d.date.replace(/-/g, ''))
+            setSectorAvg(null)
+            fetch(`/api/sectoravg?market=${json.market}&code=${code}&win=${winYMDs.join(',')}`)
+              .then(r => r.json()).then(d => { if (!d.error) setSectorAvg(d) }).catch(() => setSectorAvg(null))
+          }
         }
       }
       if (!stockOk) {
@@ -552,6 +562,13 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
             const winYMDs = all.slice(-6).map(d => d.date.replace(/-/g,''))
             const ampYMDs = all.slice(-20).map(d => d.date.replace(/-/g,''))
             fetch(`/api/sbl?market=${json.market}&code=${code}&win=${winYMDs.join(',')}&amp=${ampYMDs.join(',')}`).then(r=>r.json()).then(setSblData).catch(()=>setSblData(null))
+          }
+          // 同類/全體均值：用近 6 日的「最近 5 個 interval 日」(= days.slice(1)) 作窗口
+          {
+            const winYMDs = all.slice(-5).map(d => d.date.replace(/-/g, ''))
+            setSectorAvg(null)
+            fetch(`/api/sectoravg?market=${json.market}&code=${code}&win=${winYMDs.join(',')}`)
+              .then(r => r.json()).then(d => { if (!d.error) setSectorAvg(d) }).catch(() => setSectorAvg(null))
           }
         }
       }
@@ -680,6 +697,10 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
   /* ── Derived ─────────────────────────────────────────────────────────────── */
   const startPrice = days[days.length-1]?.bp ?? 100
   const mAvgPct = marketAvg[market]   // 當前市場別的全體已知累積漲幅%（null=未載入→純價格門檻）
+  // 同類均值%（當前市場別；匯入後才有）。窗口與 mAvgPct 對齊：皆為近6日的5個interval
+  const sAvgPct = sectorAvg?.sectorAvg ?? null
+  // 匯入個股後，全體均值改用 sectoravg 回傳值(同窗口、排除自己)；未匯入時用 mount 載入的 marketAvg
+  const mAvgEff = sectorAvg?.marketAvg ?? mAvgPct
 
   // 統一收盤時間軸：近 n 日實際收盤(各卡基準) ++ 模擬未來價(各卡計算日)；null→沿用前一日(持平)
   // 卡 i：基準=closePath[i]、計算日(預測)=closePath[i+OFFSET]、計算日前一日=closePath[i+OFFSET-1]
@@ -717,7 +738,8 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
   const evalCard = (i: number, price: number): ClauseResult[] => evalClauses({
     market, prevClose: prevCloseOf(i), sumKnown: knownSumOf(i), price,
     spreadBase: spreadBaseOf(i),
-    marketAvg6: mAvgPct,
+    marketAvg6: mAvgEff,
+    sectorAvg6: sAvgPct,
     c2: i === 0 ? clause2ForEngine() : null,
     volMet: i === 0 && clause3VolMet,
     pe: i === 0 ? pePredict(price) : null, pbr: i === 0 ? pbrPredict(price) : null, mktPe: peData?.mktPe ?? null, mktPbr: peData?.mktPbr ?? null, c6Assume: i === 0 && clause6Assume,
@@ -878,7 +900,7 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
             </thead>
             <tbody>
               {days.map((d, i) => {
-                const { t1, t2 } = thresh(d.bp, prevCloseOf(i), knownSumOf(i), spreadBaseOf(i), market, mAvgPct)
+                const { t1, t2 } = thresh(d.bp, prevCloseOf(i), knownSumOf(i), spreadBaseOf(i), market, mAvgEff, sAvgPct)
                 return (
                   <tr key={i} className="border-b border-gray-800/60">
                     <td className="py-2.5 pr-2 text-gray-400 text-sm whitespace-nowrap">{d.baseDateStr.slice(5)}</td>
@@ -954,7 +976,7 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
       {days.map((d, i) => {
         const prevClose0      = prevCloseOf(i)
         const sumKnown        = knownSumOf(i)
-        const { t1, t2 }      = thresh(d.bp, prevClose0, sumKnown, spreadBaseOf(i), market, mAvgPct)
+        const { t1, t2 }      = thresh(d.bp, prevClose0, sumKnown, spreadBaseOf(i), market, mAvgEff, sAvgPct)
         const { minP, maxP }  = getDayBounds(i, simPrices, days)
         const chosen          = simPrices[i]
         const prevUnset       = i > 0 && simPrices[i-1] === null
@@ -1034,6 +1056,16 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
               {isUnset ? '' : `累積 ${parseFloat(pctChg) > 0 ? '+' : ''}${pctChg}%`}
             </div>
 
+            {i === 0 && (
+              <div className="mt-1 space-y-0.5 text-xs">
+                <p className="text-gray-400">全體均值 <span className={(mAvgEff ?? 0) >= 0 ? 'text-red-400' : 'text-green-400'}>{mAvgEff != null ? `${mAvgEff > 0 ? '+' : ''}${mAvgEff.toFixed(2)}%` : '—'}</span>
+                  {sectorAvg?.targetCum != null && mAvgEff != null && <span className="text-gray-500 ml-1.5">差幅 {(sectorAvg.targetCum - mAvgEff).toFixed(1)}%（需≥20%）</span>}</p>
+                <p className="text-gray-400">同類均值 <span className={(sAvgPct ?? 0) >= 0 ? 'text-red-400' : 'text-green-400'}>{sAvgPct != null ? `${sAvgPct > 0 ? '+' : ''}${sAvgPct.toFixed(2)}%` : '—'}</span>
+                  {sectorAvg?.targetCum != null && sAvgPct != null && <span className="text-gray-500 ml-1.5">差幅 {(sectorAvg.targetCum - sAvgPct).toFixed(1)}%</span>}
+                  {sectorAvg?.sectorCode && <span className="text-gray-600 ml-1">（類{sectorAvg.sectorCode}）</span>}</p>
+              </div>
+            )}
+
             <div className="min-h-[22px] flex items-center gap-1.5 flex-wrap">
               {isUnset ? <span className="text-xs text-gray-600">未設定</span> : (
                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full border
@@ -1088,7 +1120,7 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
   const clause3Panel = (() => {
     if (days.length === 0) return null
     const d0 = days[0]
-    const { t3 } = thresh(d0.bp, prevCloseOf(0), knownSumOf(0), spreadBaseOf(0), market, mAvgPct)
+    const { t3 } = thresh(d0.bp, prevCloseOf(0), knownSumOf(0), spreadBaseOf(0), market, mAvgEff, sAvgPct)
     const price0 = simPrices[0]
     const pricePast = price0 != null && price0 >= t3
     const volCeil   = avg60Vol != null ? Math.round(CLAUSE3_VOL_MULT * avg60Vol / 1000) : null
@@ -1295,7 +1327,7 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
             const fIdx     = focusIdx >= 0 ? focusIdx : days.length - 1
             const focusDay = days[fIdx]
             if (!focusDay) return null
-            const { t1, t2 } = thresh(focusDay.bp, prevCloseOf(fIdx), knownSumOf(fIdx), spreadBaseOf(fIdx), market, mAvgPct)
+            const { t1, t2 } = thresh(focusDay.bp, prevCloseOf(fIdx), knownSumOf(fIdx), spreadBaseOf(fIdx), market, mAvgEff, sAvgPct)
             return (
               <div className="p-3 rounded-xl bg-gray-900 border border-gray-700 flex flex-wrap items-center gap-x-6 gap-y-1.5">
                 <div className="flex items-center gap-2">
