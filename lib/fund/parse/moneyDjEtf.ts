@@ -32,6 +32,12 @@ export function parseMoneyDJEtf(html: string, fundId: string): FundSnapshot {
     if (Number.isNaN(weightPct)) return
     const holding: FundHolding = { code, name, weightPct, rank: holdings.length + 1 }
     if (market !== 'TW') holding.market = market
+    // 股數（col07）— 可能含千分位逗號；缺值則略過
+    const sharesRaw = $r.find('td.col07').first().text().trim().replace(/,/g, '')
+    if (sharesRaw) {
+      const shares = Number(sharesRaw)
+      if (!Number.isNaN(shares)) holding.shares = shares
+    }
     holdings.push(holding)
   })
 

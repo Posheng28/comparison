@@ -1,50 +1,15 @@
 import type { FundDef } from './types'
 
-const SLUG_BY_SITCA: Record<string, string> = {
-  A09002: 'uni-allweather',
-  A09012: 'uni-benteng',
-  A09003: 'uni-blackhorse',
-  A09011: 'uni-sme',
-  A09:    'uni-greater-china-sme',
-  A22001: 'fh-growth',
-  A22:    'fh-allround',
-  A32001: 'nomura-quality',
-  A32:    'nomura-hitech',
-  A36001: 'allianz-dabar',
-  A36004: 'allianz-tech',
-  A47:    'taishin-mainstream',
-  A05:    'yuanta-newmain',
-}
-
-export function slugBySitca(code: string): string | undefined {
-  return SLUG_BY_SITCA[code]
-}
-
-export const FUNDS: FundDef[] = [
-  { fundId: 'uni-allweather',        kind: 'fund', company: 'uni',     sitcaCode: 'A09002', crawl: 'sitca' },
-  { fundId: 'uni-benteng',           kind: 'fund', company: 'uni',     sitcaCode: 'A09012', relatedEtf: '00981A', crawl: 'sitca' },
-  { fundId: 'uni-blackhorse',        kind: 'fund', company: 'uni',     sitcaCode: 'A09003', crawl: 'sitca' },
-  { fundId: 'uni-sme',               kind: 'fund', company: 'uni',     sitcaCode: 'A09011', crawl: 'sitca' },
-  { fundId: 'uni-greater-china-sme', kind: 'fund', company: 'uni',     sitcaCode: 'A09',    crawl: 'sitca' },
-  { fundId: 'fh-growth',             kind: 'fund', company: 'fuhua',   sitcaCode: 'A22001', relatedEtf: '00991A', crawl: 'sitca' },
-  { fundId: 'fh-allround',           kind: 'fund', company: 'fuhua',   sitcaCode: 'A22',    crawl: 'sitca' },
-  { fundId: 'nomura-quality',        kind: 'fund', company: 'nomura',  sitcaCode: 'A32001', crawl: 'sitca' },
-  { fundId: 'nomura-hitech',         kind: 'fund', company: 'nomura',  sitcaCode: 'A32',    crawl: 'sitca' },
-  { fundId: 'allianz-dabar',         kind: 'fund', company: 'allianz', sitcaCode: 'A36001', crawl: 'sitca' },
-  { fundId: 'allianz-tech',          kind: 'fund', company: 'allianz', sitcaCode: 'A36004', crawl: 'sitca' },
-  { fundId: 'taishin-mainstream',    kind: 'fund', company: 'taishin', sitcaCode: 'A47',    crawl: 'sitca' },
-  { fundId: 'yuanta-newmain',        kind: 'fund', company: 'yuanta',  sitcaCode: 'A05',    crawl: 'sitca' },
-]
-
 export const ETFS: FundDef[] = [
-  { fundId: '00980A', kind: 'etf', company: 'nomura',  etfTicker: '00980A', crawl: 'moneydj' },
-  { fundId: '00981A', kind: 'etf', company: 'uni',     etfTicker: '00981A', crawl: 'moneydj' },
-  { fundId: '00982A', kind: 'etf', company: 'capital', etfTicker: '00982A', crawl: 'moneydj' },
-  { fundId: '00984A', kind: 'etf', company: 'allianz', etfTicker: '00984A', crawl: 'moneydj' },
-  { fundId: '00986A', kind: 'etf', company: 'taishin', etfTicker: '00986A', crawl: 'moneydj' },
-  { fundId: '00990A', kind: 'etf', company: 'ctbc',    etfTicker: '00990A', crawl: 'moneydj' },
-  { fundId: '00991A', kind: 'etf', company: 'fuhua',   etfTicker: '00991A', crawl: 'moneydj' },
+  { fundId: '00980A', company: 'nomura',  etfTicker: '00980A', crawl: 'moneydj' }, // 主動野村臺灣優選
+  { fundId: '00981A', company: 'uni',     etfTicker: '00981A', crawl: 'moneydj' }, // 主動統一台股增長
+  { fundId: '00982A', company: 'capital', etfTicker: '00982A', crawl: 'moneydj' }, // 主動群益台灣強棒
+  { fundId: '00985A', company: 'nomura',  etfTicker: '00985A', crawl: 'moneydj' }, // 主動野村台灣50
+  { fundId: '00988A', company: 'uni',     etfTicker: '00988A', crawl: 'moneydj' }, // 主動統一全球創新
+  { fundId: '00990A', company: 'yuanta',  etfTicker: '00990A', crawl: 'moneydj' }, // 主動元大 AI 新經濟
+  { fundId: '00991A', company: 'fuhua',   etfTicker: '00991A', crawl: 'moneydj' }, // 主動復華未來 50
+  { fundId: '00992A', company: 'capital', etfTicker: '00992A', crawl: 'moneydj' }, // 主動群益科技創新
 ]
 
-export const ALL_DEFS: FundDef[] = [...FUNDS, ...ETFS]
+export const ALL_DEFS: FundDef[] = ETFS
 export const defById = (id: string) => ALL_DEFS.find(d => d.fundId === id)

@@ -1,22 +1,18 @@
 import { describe, it, expect } from 'vitest'
-import { FUNDS, ETFS, ALL_DEFS, slugBySitca } from '../sources'
+import { ETFS, ALL_DEFS } from '../sources'
 
-describe('fund registry', () => {
-  it('有 13 檔基金、7 檔 ETF', () => {
-    expect(FUNDS).toHaveLength(13)
-    expect(ETFS).toHaveLength(7)
+describe('ETF registry', () => {
+  it('有 8 檔主動式 ETF', () => {
+    expect(ETFS).toHaveLength(8)
   })
   it('fundId 全域唯一', () => {
     const ids = ALL_DEFS.map(d => d.fundId)
     expect(new Set(ids).size).toBe(ids.length)
   })
-  it('每檔基金都有 sitcaCode 且 slug 映射存在', () => {
-    for (const f of FUNDS) {
-      expect(f.sitcaCode).toBeTruthy()
-      expect(slugBySitca(f.sitcaCode!)).toBe(f.fundId)
-    }
-  })
-  it('ETF fundId === ticker', () => {
+  it('fundId === etfTicker', () => {
     for (const e of ETFS) expect(e.fundId).toBe(e.etfTicker)
+  })
+  it('ALL_DEFS === ETFS', () => {
+    expect(ALL_DEFS).toBe(ETFS)
   })
 })

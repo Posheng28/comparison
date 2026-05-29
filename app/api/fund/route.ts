@@ -1,39 +1,64 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { ALL_DEFS, FUNDS, defById } from '@/lib/fund/sources'
+import { ETFS, defById } from '@/lib/fund/sources'
 import { loadSnapshot, listPeriods } from '@/lib/fund/store'
-import { stockDistribution, dualTrack } from '@/lib/fund/query'
-import { fundMoves, aggregateMoves } from '@/lib/fund/moves'
-import type { FundSnapshot, ReportType } from '@/lib/fund/types'
+import { fundMoves, aggregateMoves, type FundMove } from '@/lib/fund/moves'
+import { computeFlow, type EtfSnapshots } from '@/lib/fund/flow'
 
-async function latest(fundId: string, rt: ReportType): Promise<FundSnapshot | null> {
-  const periods = await listPeriods(fundId, rt)
+async function latest(fundId: string) {
+  const periods = await listPeriods(fundId, 'etf_daily')
   if (!periods.length) return null
-  return loadSnapshot(fundId, rt, periods[periods.length - 1])
+  return loadSnapshot(fundId, 'etf_daily', periods[periods.length - 1])
+}
+
+/** 載入所有 ETF 的完整快照序列（由舊到新） */
+async function allEtfSnapshots(): Promise<EtfSnapshots[]> {
+  const out: EtfSnapshots[] = []
+  for (const def of ETFS) {
+    const periods = await listPeriods(def.fundId, 'etf_daily')
+    if (!periods.length) continue
+    const snaps = await Promise.all(
+      periods.map(p => loadSnapshot(def.fundId, 'etf_daily', p)),
+    )
+    const snapshots = snaps.filter((s): s is NonNullable<typeof s> => s !== null)
+    if (snapshots.length) out.push({ fundId: def.fundId, snapshots })
+  }
+  return out
 }
 
 export async function GET(req: NextRequest) {
   const sp = new URL(req.url).searchParams
-  const fundId = sp.get('fund'), stock = sp.get('stock'), pair = sp.get('pair')
+  const fundId = sp.get('fund')
   const moves = sp.get('moves')
+  const flow = sp.get('flow')
+
+  if (flow) {
+    const code = flow.trim().toUpperCase()
+    if (!/^\d{4,6}[A-Z]?$/.test(code)) {
+      return NextResponse.json({ error: '請輸入台股代號' }, { status: 400 })
+    }
+    const perEtf = await allEtfSnapshots()
+    const series = computeFlow(perEtf, code)
+    return NextResponse.json(series)
+  }
 
   if (moves) {
-    const perFund: { fundId: string; moves: ReturnType<typeof fundMoves> }[] = []
+    const perFund: { fundId: string; moves: FundMove[] }[] = []
     let currPeriod = '', prevPeriod = ''
 
-    for (const def of FUNDS) {
-      const periods = await listPeriods(def.fundId, 'monthly_top10')
+    for (const def of ETFS) {
+      const periods = await listPeriods(def.fundId, 'etf_daily')
       if (periods.length < 2) continue
       const cp = periods[periods.length - 1]
       const pp = periods[periods.length - 2]
-      if (!currPeriod) { currPeriod = cp; prevPeriod = pp }
+      if (!currPeriod || cp > currPeriod) { currPeriod = cp; prevPeriod = pp }
 
-      const [currSnap, prevSnap] = await Promise.all([
-        loadSnapshot(def.fundId, 'monthly_top10', cp),
-        loadSnapshot(def.fundId, 'monthly_top10', pp),
+      const [curr, prev] = await Promise.all([
+        loadSnapshot(def.fundId, 'etf_daily', cp),
+        loadSnapshot(def.fundId, 'etf_daily', pp),
       ])
-      if (!currSnap || !prevSnap) continue
+      if (!curr || !prev) continue
 
-      const fm = fundMoves(prevSnap, currSnap)
+      const fm = fundMoves(prev, curr)
       if (fm.length) perFund.push({ fundId: def.fundId, moves: fm })
     }
 
@@ -54,24 +79,9 @@ export async function GET(req: NextRequest) {
 
   if (fundId) {
     const def = defById(fundId)
-    const monthly = await latest(fundId, 'monthly_top10')
-    const quarterly = await latest(fundId, 'quarterly_full')
-    const etfDaily = def?.kind === 'etf' ? await latest(fundId, 'etf_daily') : null
-    return NextResponse.json({ def, monthly, quarterly, etfDaily })
+    const etfDaily = def ? await latest(fundId) : null
+    return NextResponse.json({ def, etfDaily })
   }
-  if (stock) {
-    const all: FundSnapshot[] = []
-    for (const d of ALL_DEFS) {
-      for (const rt of ['monthly_top10', 'quarterly_full', 'etf_daily'] as ReportType[]) {
-        const s = await latest(d.fundId, rt); if (s) all.push(s)
-      }
-    }
-    return NextResponse.json({ stock, distribution: stockDistribution(all, stock) })
-  }
-  if (pair) {
-    const [fId, eId] = pair.split(',')
-    const f = await latest(fId, 'monthly_top10'), e = await latest(eId, 'etf_daily')
-    return NextResponse.json({ rows: f && e ? dualTrack(f, e) : [] })
-  }
-  return NextResponse.json({ funds: ALL_DEFS })
+
+  return NextResponse.json({ funds: ETFS })
 }

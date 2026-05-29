@@ -53,7 +53,12 @@ next-env.d.ts
 # DJ legal-person holdings crawl cache
 /.legaldata/
 
-# orphaned MI_QFIIS cache (fundStore removed)
+# 主動式 ETF 每日持股快取（MoneyDJ，可重抓）
 /.funddata/
-# 基金月/季報歷史（committed，SITCA 歷史抓不回來）：data/funds/ 不忽略
 Usersuser*.json
+
+# Claude Code plugin/local cache
+/.claude/
+
+# 處置面板偵察暫存（fixtures 取樣後刪）
+/.tmp_sec/

@@ -2,15 +2,15 @@ import { describe, it, expect } from 'vitest'
 import { fundMoves, aggregateMoves } from '../moves'
 import type { FundSnapshot } from '../types'
 
-// Real fixtures — copied from data/funds/uni-allweather/monthly_top10_2026-03.json
-// and monthly_top10_2026-04.json. ALL values below were observed/computed from those files.
+// Real-shape fixtures — historic uni-allweather Mar→Apr 2026 monthly holdings,
+// repurposed as etf_daily snapshots for testing fundMoves' pure logic.
 import prevSnap from './fixtures/moves-prev.json'
 import currSnap from './fixtures/moves-curr.json'
 
 const prev = prevSnap as unknown as FundSnapshot
 const curr = currSnap as unknown as FundSnapshot
 
-describe('fundMoves — real uni-allweather 2026-03 → 2026-04', () => {
+describe('fundMoves — real prev → curr fixture', () => {
   const moves = fundMoves(prev, curr)
 
   it('returns a non-empty array', () => {
@@ -70,11 +70,11 @@ describe('fundMoves — real uni-allweather 2026-03 → 2026-04', () => {
   it('no move emitted when weight unchanged (no unchanged stocks in this pair → confirms omit logic via synthetic)', () => {
     // synthetic: same weight in both → should be omitted
     const fakePrev: FundSnapshot = {
-      fundId: 'x', reportType: 'monthly_top10', period: '2026-03', source: 't', fetchedAt: '',
+      fundId: 'x', reportType: 'etf_daily', period: '2026-03', source: 't', fetchedAt: '',
       holdings: [{ code: '1111', name: 'AA', weightPct: 5.0 }, { code: '2222', name: 'BB', weightPct: 3.0 }],
     }
     const fakeCurr: FundSnapshot = {
-      fundId: 'x', reportType: 'monthly_top10', period: '2026-04', source: 't', fetchedAt: '',
+      fundId: 'x', reportType: 'etf_daily', period: '2026-04', source: 't', fetchedAt: '',
       holdings: [{ code: '1111', name: 'AA', weightPct: 5.0 }, { code: '2222', name: 'BB', weightPct: 4.0 }],
     }
     const result = fundMoves(fakePrev, fakeCurr)

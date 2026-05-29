@@ -1,12 +1,12 @@
-export type ReportType = 'monthly_top10' | 'quarterly_full' | 'etf_daily'
-export type FundKind = 'fund' | 'etf'
-export type CrawlStrategy = 'sitca' | 'moneydj' | 'none'
+export type ReportType = 'etf_daily'
+export type CrawlStrategy = 'moneydj' | 'none'
 
 export interface FundHolding {
   code: string
   name: string
   weightPct: number
   rank?: number
+  shares?: number   // 持股股數（張數×1000 = 股）；流向指標的主要度量
   amount?: number
   market?: string
 }
@@ -23,10 +23,7 @@ export interface FundSnapshot {
 
 export interface FundDef {
   fundId: string
-  kind: FundKind
   company: string
-  sitcaCode?: string
-  etfTicker?: string
-  relatedEtf?: string
+  etfTicker: string
   crawl: CrawlStrategy
 }

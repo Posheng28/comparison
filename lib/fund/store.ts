@@ -2,7 +2,6 @@ import { promises as fs } from 'fs'
 import path from 'path'
 import type { FundSnapshot, ReportType } from './types'
 
-const COMMITTED = path.join(process.cwd(), 'data', 'funds')
 const ETF_CACHE = path.join(process.cwd(), '.funddata', 'etf')
 const mem = new Map<string, FundSnapshot>()
 const diskOk = new Map<string, boolean>()
@@ -10,8 +9,7 @@ const diskOk = new Map<string, boolean>()
 const key = (fundId: string, rt: ReportType, period: string) => `${fundId}|${rt}|${period}`
 
 export function snapshotPath(s: FundSnapshot): string {
-  if (s.reportType === 'etf_daily') return path.join(ETF_CACHE, s.fundId, `${s.period}.json`)
-  return path.join(COMMITTED, s.fundId, `${s.reportType}_${s.period}.json`)
+  return path.join(ETF_CACHE, s.fundId, `${s.period}.json`)
 }
 
 async function ensureDir(dir: string): Promise<boolean> {
@@ -42,13 +40,11 @@ export async function loadSnapshot(fundId: string, rt: ReportType, period: strin
   } catch { return null }
 }
 
-export async function listPeriods(fundId: string, rt: ReportType): Promise<string[]> {
-  const dir = rt === 'etf_daily' ? path.join(ETF_CACHE, fundId) : path.join(COMMITTED, fundId)
+export async function listPeriods(fundId: string, _rt: ReportType): Promise<string[]> {
+  const dir = path.join(ETF_CACHE, fundId)
   try {
     const files = await fs.readdir(dir)
-    const prefix = rt === 'etf_daily' ? '' : `${rt}_`
-    return files.filter(f => f.endsWith('.json') && f.startsWith(prefix))
-      .map(f => f.slice(prefix.length, -5)).sort()
+    return files.filter(f => f.endsWith('.json')).map(f => f.slice(0, -5)).sort()
   } catch { return [] }
 }
 

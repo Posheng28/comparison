@@ -67,7 +67,7 @@ async function fetchTPExMonthly(stockNo: string, rocYM: string): Promise<{ date:
   } catch { return [] }
 }
 
-async function fetchYahoo(symbol: string, params: { range?: string; from?: string; to?: string }) {
+async function fetchYahoo(symbol: string, params: { range?: string; from?: string; to?: string; ohlc?: boolean }) {
   let url: string
   if (params.from && params.to) {
     const p1 = Math.floor(new Date(params.from + 'T00:00:00Z').getTime() / 1000)
@@ -84,8 +84,12 @@ async function fetchYahoo(symbol: string, params: { range?: string; from?: strin
   if (!result) return null
 
   const timestamps: number[] = result.timestamp ?? []
-  const closes: number[]     = result.indicators?.quote?.[0]?.close ?? []
-  const volumes: number[]    = result.indicators?.quote?.[0]?.volume ?? []
+  const q = result.indicators?.quote?.[0] ?? {}
+  const closes: number[]     = q.close ?? []
+  const volumes: number[]    = q.volume ?? []
+  const opens: number[]      = q.open ?? []
+  const highs: number[]      = q.high ?? []
+  const lows: number[]       = q.low ?? []
 
   const data = timestamps
     .map((ts, i) => {
@@ -95,10 +99,18 @@ async function fetchYahoo(symbol: string, params: { range?: string; from?: strin
       const value = closes[i]
       if (value == null || isNaN(value)) return null
       const vol = volumes[i]   // 成交股數（款三 60 日均量用）；缺值留 undefined
-      return { date, value, volume: vol == null || isNaN(vol) ? undefined : vol }
+      const point: { date: string; value: number; volume?: number; open?: number; high?: number; low?: number } =
+        { date, value, volume: vol == null || isNaN(vol) ? undefined : vol }
+      if (params.ohlc) {
+        const o = opens[i], h = highs[i], l = lows[i]
+        if (o != null && !isNaN(o)) point.open = o
+        if (h != null && !isNaN(h)) point.high = h
+        if (l != null && !isNaN(l)) point.low = l
+      }
+      return point
     })
     .filter(Boolean)
-    .sort((a, b) => (a!.date < b!.date ? -1 : 1)) as { date: string; value: number; volume?: number }[]
+    .sort((a, b) => (a!.date < b!.date ? -1 : 1)) as { date: string; value: number; volume?: number; open?: number; high?: number; low?: number }[]
 
   return data.length > 0 ? data : null
 }
@@ -109,14 +121,16 @@ export async function GET(req: NextRequest) {
   const range  = searchParams.get('range') || '2Y'
   const from   = searchParams.get('from') ?? undefined
   const to     = searchParams.get('to')   ?? undefined
+  const ohlc   = searchParams.get('ohlc') === '1'
 
   if (!ticker) return NextResponse.json({ error: 'Missing ticker' }, { status: 400 })
 
   const bust = searchParams.get('bust') === '1'
   const candidates = candidateTickers(ticker)
-  const cacheKey   = from && to
+  const suffix     = ohlc ? ':ohlc' : ''
+  const cacheKey   = (from && to
     ? `stocks:${candidates[0]}:${from}:${to}`
-    : `stocks:${candidates[0]}:${range}`
+    : `stocks:${candidates[0]}:${range}`) + suffix
 
   // Bust stale cache entries for this ticker when explicitly requested
   if (bust) deleteCachePrefix(`stocks:${candidates[0]}:`)
@@ -130,7 +144,7 @@ export async function GET(req: NextRequest) {
 
   try {
     for (const symbol of candidates) {
-      let data = await fetchYahoo(symbol, { range, from, to })
+      let data = await fetchYahoo(symbol, { range, from, to, ohlc })
       if (!data) continue
 
       // 判定市場別：.TW → 上市(TWSE)，.TWO → 上櫃(TPEx)

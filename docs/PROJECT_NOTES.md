@@ -11,7 +11,7 @@
 - `period`：時段比較，起點對齊（`PeriodPanel` + `PeriodChart`）
 - `disposal`：**台股注意/處置推演**（`DisposalTool`）
 - `chips`：**集保大戶 / 內部大戶籌碼**（`ChipsView` 個股趨勢 + `ChipsScreener` 篩選排行）← 見第六節
-- `fund`：**基金 / 經理人持股**（`FundView`）← 見第七節
+- `fund`：**主動式 ETF 持股**（`FundView`，UI 標籤已改成「主動式ETF」）← 見第七節
 
 ---
 
@@ -175,41 +175,33 @@ components/
   ChipsView.tsx               籌碼-個股大戶趨勢（自訂張數區間、逐週扣三大法人）
   ChipsScreener.tsx           籌碼-篩選排行（大戶/內部大戶 top50、lazy 自動爬）
   FundView.tsx                訊號台 entry → renders <FundShell/>
-  fund/FundShell.tsx          6 區段 sidebar + 冠軍頁；container ResizeObserver < 720px 收合成 top-nav
-  fund/MovesView.tsx          01 動向（加減碼聚合）
-  fund/HoldingsView.tsx       02 持股 / 03 雙軌（基金 vs 同經理人 ETF）
-  fund/StrategiesView.tsx     04 策略（9 訊號回測表，種子資料）
-  fund/DnaView.tsx            05 經理人 DNA（concentration × turnover 四象限散佈 + 指標表）
-  fund/FlowView.tsx           06 資金流（30×12 cross-fund 熱力圖）
-  fund/ChampionsView.tsx      🏆 主動式 ETF YTD Top7 4 維度比較
+  fund/FundShell.tsx          4 區段 sidebar (01 動向 / 02 持股 / 03 冠軍 / 04 個股流向)；container ResizeObserver < 720px 收合成 top-nav
+  fund/MovesView.tsx          01 動向（跨 8 檔 ETF 每日加減碼聚合）
+  fund/HoldingsView.tsx       02 持股（單 ETF 持股表 + 更新本期按鈕）
+  fund/ChampionsView.tsx      03 冠軍（主動式 ETF YTD Top7 4 維度比較：績效/共識持股/重疊矩陣/集中度×YTD）
+  fund/FlowView.tsx           04 個股流向（K 線 + 跨 ETF 淨持股股數變動柱，lightweight-charts）
 app/api/
-  stocks/                     Yahoo + TWSE/TPEx 補抓股價，回 market（含 volume）
+  stocks/                     Yahoo + TWSE/TPEx 補抓股價，回 market（含 volume；?ohlc=1 加 open/high/low）
   notices/ disposal/ disposal-list/   注意/處置紀錄
   market-avg/                 全體累積漲幅平均（款一差幅 ≥ 20% 基底）
   chips/                      單股 TDCC 集保級距週歷史（on-demand 爬 qryStock）
   foreign/                    單股逐週三大法人持股%（DJ，via lib/dj）
   chips-rank/                 全市場大戶/內部大戶排行（opendata + legalStore）
   chips-crawl/                背景漸進爬 DJ 三大法人（種子/維護/去重）
-  fund/                       基金 API（?fund=、?stock=、?pair=、?moves=1、bare）
-  fund-crawl/                 live 抓取（POST {fundId}），18:30 gate (→ 425)
-  fund-strategies/            GET data/fund-strategies.json（9 策略回測）
-  fund-dna/                   GET data/fund-dna.json（13 基金 DNA）
-  fund-flow/                  GET data/fund-flow.json（30×12 熱力圖）
-  fund-rank/                  GET data/fund-rank.json（主動式 ETF 排行 snapshot）
+  fund/                       ETF API（bare → 列出 8 檔；?fund=<id> → {def, etfDaily}；?moves=1 → 跨 ETF 動向聚合；?flow=CODE → 個股流向序列）
+  fund-crawl/                 live 抓最新（8 檔統一 MoneyDJ）；POST {fundId} 單檔覆蓋｜POST {all:true} 一次爬全 8 檔（以來源日期為鍵，已存在則跳過）；18:30 gate (→ 425)，{force:true} 可繞過
+  fund-rank/                  GET data/fund-rank.json（主動式 ETF YTD 排行 snapshot）
 lib/fund/
-  types.ts                    types (CrawlStrategy 簡化為 'sitca'|'moneydj'|'none')
-  sources.ts                  ALL_DEFS（13 基金 + 6 ETF）
-  store.ts                    disk+memory snapshot store（仿 chipsStore）
-  query.ts                    stockDistribution / dualTrack
-  moves.ts                    fundMoves / aggregateMoves（純函式）
-  seed.ts                     transformHoldings / transformEtfHoldings（純）
-  period.ts                   joyPeriod (YYYYMM → YYYY-MM 或 YYYY-Qn)
+  types.ts                    types（ReportType 只剩 'etf_daily'、CrawlStrategy 只剩 'moneydj'|'none'）
+  sources.ts                  ETFS = ALL_DEFS（8 檔主動式 ETF）
+  store.ts                    disk+memory snapshot store（ETF cache 至 .funddata/etf/<id>/<period>.json）
+  moves.ts                    fundMoves / aggregateMoves（純函式，FundSnapshot 通用）
+  flow.ts                     computeFlow（純）：個股跨 ETF 逐日淨持股股數變動聚合
   timegate.ts                 isAfterCutoff（台灣 18:30，純）
   parse/moneyDjEtf.ts         統一 ETF parser（cheerio：td.col05/06/07）
-  __tests__/fixtures/         moneydj-*.html（6 ETF + rank 真實 fixtures）
-scripts/fund-seed.ts          一次性 CLI：npm run fund:seed
-data/funds/                   committed 月/季報歷史 seed（JOY88，3 年 × 13 檔 = 6246 列）
-data/fund-{strategies,dna,flow,rank}.json   committed 衍生資料
+  parse/moneyDjRank.ts        ETF YTD 排行 parser
+  __tests__/fixtures/         moneydj-*.html（9 ETF + rank 真實 fixtures）+ moves-{prev,curr}.json；flow.test.ts
+data/fund-rank.json           committed 主動式 ETF 排行 snapshot
 .funddata/etf/                ETF 每日快照本機快取（gitignore，可重抓）
 lib/cache.ts                  記憶體快取（getCached/setCached/deleteCachePrefix）
 lib/chipsStore.ts             單股 TDCC 級距週資料（per-ticker）
@@ -286,101 +278,84 @@ docs/PROJECT_NOTES.md         （本檔）
 
 ---
 
-## 七、基金 / 經理人持股（fund 模式）
+## 七、主動式 ETF 持股（fund 模式）
 
-目標：仿 JOY88 Fund Tracker 的「投信基金月報 × 主動式 ETF 每日持股」交叉比對；核心訊號是**多基金共識**（圈內共識）。**用自有原創設計**，不是 JOY88 視覺拷貝。
+> **2026/05/29 重構**：原本 13 檔投信基金（SITCA 月/季報）的 live 來源遲遲找不到（SITCA WebForms 那頁實際上是 fund-of-funds 投資比率表，cnYES 代號錯位且落後，MoneyDJ 基金區 big5 沒解），所以放棄基金、只做主動式 ETF。刪除：13 檔基金 seed (`data/funds/`)、衍生 JSON (`fund-{strategies,dna,flow}.json`)、04 策略 / 05 經理人 / 06 資金流 三頁、`lib/fund/{seed,period,query}.ts`、`scripts/fund-seed.ts`、`sitca` crawl 策略。Git history 留有完整脈絡，需要追歷史時可 `git log -- data/funds/`。
+
+目標：跨 7 檔主動式 ETF 看每日持股動向、單檔持股明細，與 YTD 冠軍 ETF 的交叉分析。
+
+### 8 檔 ETF（`lib/fund/sources.ts` 唯一真相來源，2026/05/29 對齊 MoneyDJ 主動式 ETF 排行）
+00980A 主動野村臺灣優選、00981A 主動統一台股增長、00982A 主動群益台灣強棒、00985A 主動野村台灣50、00988A 主動統一全球創新、00990A 主動元大 AI 新經濟、00991A 主動復華未來50、00992A 主動群益科技創新。全部走 MoneyDJ。
+- **00988A 含 US/JP/KS 多市場部位**，parser 已支援。
+- 早期曾納入 00984A 安聯、00986A 台新、00993A，現已移出（不再列在 MoneyDJ 主動排行）。Test fixtures 仍保留以驗證 parser 對多形態 HTML 的相容性。
 
 ### 「訊號台」識別（自有）
 - CSS vars 在 `app/globals.css` 的 `.fund-term`：`--bg #0e1116 / --panel #161a22 / --panel2 #1c2230 / --line / --accent #35c9d6 (cyan) / --txt / --txt-dim / --txt-mute / --up #ff5d6c (red) / --down #34d399 (green)`。
 - 台股慣例 **red=漲/加碼、green=跌/減碼**（跟西方相反，別搞錯）。
-- `font-mono` + `tabular-nums` 所有數字；nav 加 mono index `01..06`。
+- `font-mono` + `tabular-nums` 所有數字；nav 加 mono index `01..03`。
 - RWD：FundShell 用 ResizeObserver 監看 container 寬度，**< 720px 自動把 sidebar 收成 top-nav**；MovesView grid 用 `repeat(auto-fit, minmax(min(100%, 300px), 1fr))` 保證子欄不溢位（`min(100%, X)` 是關鍵 trick）。
 
-### 6 個分頁
+### 4 個分頁
 | # | 名稱 | 元件 | 內容 |
 |---|------|------|------|
-| 01 | 動向 | `MovesView` | 本期 vs 上期跨 13 基金 加碼/減碼/新進/落榜聚合 |
-| 02 | 持股 | `HoldingsView` | 各基金 Top10 + 雙軌（基金 vs 同經理人 ETF） |
-| 03 | 雙軌 | (reuses HoldingsView) | 同 02 切重點 |
-| 04 | 策略 | `StrategiesView` | 9 種訊號回測表（Sharpe/Sortino/Alpha…，種子資料） |
-| 05 | 經理人 | `DnaView` | concentration × turnover 四象限散佈 + DNA 指標表（13 基金） |
-| 06 | 資金流 | `FlowView` | 30 股 × 12 月 cross-fund 熱力圖 |
-| 🏆 | 冠軍 | `ChampionsView` | 主動式 ETF YTD Top7 四維比較：績效表 / 共識持股 / 重疊矩陣 / 集中度×YTD 散佈 |
+| 01 | 動向 | `MovesView` | 跨 8 檔 ETF 最新 vs 前一可得交易日 加碼/減碼/新進/落榜聚合 |
+| 02 | 持股 | `HoldingsView` | 單 ETF 持股表 + 更新本期 |
+| 03 | 冠軍 | `ChampionsView` | YTD Top7 四維比較：績效表 / 共識持股 / 重疊矩陣 / 集中度×YTD |
+| 04 | 個股流向 | `FlowView` | 輸入股號 → 上方 K 線 + 下方逐日「跨 ETF 淨持股股數變動」柱（紅=加碼/綠=減碼）。見下方流向指標。 |
 
 ### 資料模型（`lib/fund/types.ts`）
-- `ReportType: 'monthly_top10' | 'quarterly_full' | 'etf_daily'`
-- `CrawlStrategy: 'sitca' | 'moneydj' | 'none'` — **單純化後**；曾有 7 種策略，refactor 後合併。
+- `ReportType: 'etf_daily'`（單一）
+- `CrawlStrategy: 'moneydj' | 'none'`
 - `FundSnapshot { fundId, reportType, period, source, fetchedAt, holdings[], meta? }`
-- `FundHolding { code, name, weightPct, rank?, amount?, market? }`
-- `FundDef { fundId, kind, company, sitcaCode?, etfTicker?, relatedEtf?, crawl }`
+- `FundHolding { code, name, weightPct, rank?, shares?, amount?, market? }` — `shares`（股數）是流向指標的主要度量；MoneyDJ 取 `td.col07`、野村 API 取 Table row[2]。
+- `FundDef { fundId, company, etfTicker, crawl }`
 - 唯一鍵 `(fundId, reportType, period)`，重存 = upsert（冪等）。
 
 ### 儲存（`lib/fund/store.ts`，仿 chipsStore disk+memory）
-| 資料 | 路徑 | git |
-|------|------|-----|
-| 基金月/季報 | `data/funds/<fundId>/<reportType>_<period>.json` | ✅ commit（SITCA 歷史抓不回來） |
-| ETF 每日 | `.funddata/etf/<ticker>/<period>.json` | ❌ gitignore（可重抓快取） |
+- ETF 每日：`.funddata/etf/<ticker>/<period>.json`（gitignore，可重抓）
+- `saveSnapshot/loadSnapshot/listPeriods` API；唯讀 FS 自動退記憶體。
 
-`saveSnapshot/loadSnapshot/listPeriods` API；唯讀 FS 自動退記憶體（仿 chipsStore 模式）。
-
-### Live 爬蟲 — 6/6 ETF 全部走 MoneyDJ（統一）
-經多輪反覆，最終收斂到單一來源：
-- **`crawl: 'moneydj'`**：`GET https://www.moneydj.com/ETF/X/Basic/Basic0007B.xdjhtm?etfid=<TICKER>.TW`
+### Live 爬蟲 — MoneyDJ（單一來源）
+- `crawl: 'moneydj'`：`GET https://www.moneydj.com/ETF/X/Basic/Basic0007B.xdjhtm?etfid=<TICKER>.TW`
   - **UTF-8、無 cookie/token/auth、server-to-server 直接 200**。
   - Cheerio selector：`tr` filter has both `td.col05` + `td.col06`。
   - 取 row：`td.col05 a` text 為 `<中文名>(<code>.TW)`；`td.col06` weight%；`td.col07` shares。
   - Period：掃全頁第一個 `YYYY/MM/DD` → `YYYY-MM-DD`。
-  - 一個 parser (`lib/fund/parse/moneyDjEtf.ts`) 通吃 6 檔 ETF。
-  - 對拍結果（fixtures 已存）：00980A 45 檔、00981A 51 檔、00982A 59 檔、00988A 13 檔（含日韓股，DJ 只展示台股部分）、00991A 50 檔、00993A 52 檔。
-- **`crawl: 'sitca'`**（13 檔基金月報）→ **目前 501 未實作**。詳見死路段。
-
-### Live 爬蟲 — 死路歷史（保留警示，請看完再決定方向）
-我們曾把各 ETF 接成「per-issuer 4 個 parser + token bootstrap」一團，全部被 MoneyDJ 取代。保留警示：
-
-| 來源 | 端點 | 為什麼廢 |
-|------|------|----------|
-| **野村** | `POST nomurafunds.com.tw/API/ETFAPI/api/Fund/GetFundAssets` body `{FundID,SearchDate:null}` 純 REST | 能用，被 MoneyDJ 收編 |
-| **群益** | `POST capitalfund.com.tw/CFWeb/api/etf/buyback` body `{fundId,date:null}` (fundId 是內部碼如 "399" 不是 ticker) | 同上 |
-| **安聯** | XSRF 2-step：先 `GET /webapi/api/AntiForgery/GetAntiForgeryToken`（24h token + AspNetCore antiforgery cookie），再 `POST /webapi/api/Fund/GetFundAssets {FundID:"E0002"}` 帶 `X-XSRF-TOKEN` header + 上一步 cookie。內部碼 E0002→00993A | XSRF chain 工，但 MoneyDJ 不必做 |
-| **CMoney** | `POST /api/customReport/app/v2/dtno/JsonCsv` body `{Dtno:59449513, Params:"AssignID=<ticker>;...;MajorTable=M722;", FilterNo:"0"}` + `Bearer <guest JWT 24h>` + `X-System-Kind` header；token bootstrap 在 `/api/identity/token` 但需公開不可知的 `client_id`，曾用 env `CMONEY_GUEST_TOKEN` | 純人工 token refresh 痛，被 MoneyDJ 收編 |
-| **SITCA WebForms `IN2607.aspx?PGMID=IN2629`** | 多步 WebForms postback：GET 拿 `__VIEWSTATE` → POST 公司變更 → POST `BtnQuery=查詢`，token chain 一次性 | **這頁實際是 fund-of-funds 投資比率表**（基金下拉只列「組合型基金」、欄是國內/境外投資比率，無個股代號）。**JOY88 文章宣稱這頁是「月報前十大持股」是錯的**。多步 postback chain 伺服器端復現也未成功（懷疑缺 ASP.NET_SessionId 預熱）。SITCA 真正的個股月報頁尚未找到 |
-| **cnYES API** | `GET fund.api.cnyes.com/fund/api/v1/funds/<8字fundId>/holdings` + `X-System-Kind: FUND-DESKTOP` + `X-Platform: WEB` headers | 無 auth 但**致命缺陷**：`id` 欄是英文公司名（"Taiwan Semiconductor Manufacturing Co Ltd"）非台股代號，跨基金 code 匹配壞掉；`portfolioDate` 落後 1-2 個月，**比種子還舊** |
-
-### 種子資料 — 歷史回補
-`data/funds/` 已 commit：
-- **13 檔 × 22 期 = 6,246 holding rows**
-- 季報 2023Q1 → 2026-Q1（4,466 列） + 月報 Top10 2025-03 → 2026-04（1,780 列）
-- 來源：JOY88 Fund Tracker 站 `joy88-fund-tracker.web.app` 的靜態 JSON 模式（`/data/holdings.json` 直接抓 1.5MB；不需逆向）
-- 一次性 CLI：`scripts/fund-seed.ts`（`npm run fund:seed`），純函式 `lib/fund/seed.ts`。
-- Join 規則：JOY88 `fund_name`(中文) ↔ `fund-info.name` → `fund-info.code`(A09002 等) → `slugBySitca(code)` → 我們的 slug；`SLUG_BY_SITCA` 全 ASCII 不嵌中文。**坑**：JOY88 `holdings.json` 的 `fund_code` 是**公司碼**（A0009 = 統一 5 檔基金共用），非每檔唯一；必須用 `fund_name` 當 join key。
-- SITCA 月報官方公佈日：**每月第 10 個營業日**。下次發 2026-05 月資料 → 2026/06 月初；屆時 seed 失效需重抓或解 live 來源。
+  - 一個 parser (`lib/fund/parse/moneyDjEtf.ts`) 通吃所有 ETF（含 US/JP/KS 多市場）。
+  - 對拍結果（fixtures 已存）：00980A 45、00981A 51、00982A 59、00984A 109、00986A 28、00990A 52、00991A 50。
 
 ### 加減碼聚合（`lib/fund/moves.ts`，純）
-- `fundMoves(prev, curr): FundMove[]` per-stock 變化（`kind: 'add' | 'reduce' | 'enter' | 'exit'`）
-- `aggregateMoves(perFund): StockAgg[]` 跨基金 group by code，計 `upCount/downCount/netCount/totalDelta`
-- `?moves=1` API 回 `{currPeriod, prevPeriod, up[], down[]}`
-- **真實結果（2026-04 vs 2026-03）**：11 檔基金同步加碼台光電（+12.53 合計權重）vs 11 檔基金同步減碼台積電（−16.09 合計）——半導體上游 → PCB/載板 鏈鬱輪轉訊號自然浮現。這就是 JOY88 想做的「圈內共識」。
-
-### 衍生資料檔（committed JSON, FundView 直接 fetch）
-| 檔案 | 用途 | 來源 |
-|------|------|------|
-| `data/fund-strategies.json` | 9 策略回測表 | JOY88 seed `backtest.json` 修剪（保留 summary，丟 trades 陣列） |
-| `data/fund-dna.json` | 13 基金 DNA 指標 | JOY88 seed `dna-dual.json` 去 photo 路徑 |
-| `data/fund-flow.json` | 30 股 × 12 月 cross-fund 熱力圖 | JOY88 seed `flow-heatmap.json` 原樣 |
-| `data/fund-rank.json` | 主動式 ETF YTD 排行 + meta | MoneyDJ `Rank0001.xdjhtm` parsed snapshot |
-
-### ⚠️ Data-integrity 教訓
-**Sub-agent 自生「寫實 spread」假資料事故**：曾有 implementer 自行生成 `fund-strategies.json`，graduation 6m 寫成 `0.1634` / 387 trades，與 JOY88 真實 (63.54% / 510 trades) 差距巨大。**Data fixture 必須 verbatim 真實 server response 或 seed 直接 cp**，任何「我幫你補一些寫實 spread」自生資料都是 fabrication，後果嚴重。修補後所有 fixtures 已對拍真實值（含 6 個 MoneyDJ ETF 的 byte-identical 重 curl 驗證）。
+- `fundMoves(prev, curr): FundMove[]` per-stock 變化（`kind: 'add' | 'reduce' | 'enter' | 'exit'`，weight 不變則略過）。
+- `aggregateMoves(perFund): StockAgg[]` 跨 ETF group by code，計 `upCount/downCount/netCount/totalDelta`。
+- `/api/fund?moves=1` 內：對每檔 ETF 拿最新 2 個 `etf_daily` period（latest vs prev），各算 `fundMoves` 後丟給 `aggregateMoves`。回 `{currPeriod, prevPeriod, up[], down[]}`，up/down 各取前 40。
+- `currPeriod/prevPeriod` 取所有 ETF 裡**最晚的 latest**那一對；若各 ETF 抓取日期不同（罕見），仍是逐 ETF 自己對自己比，不會混期。
 
 ### 觸發流程
-1. 開 chart-overlay「基金」分頁 → MovesView 預設顯示。
-2. 點某基金 → HoldingsView 顯示 Top10 + 切換雙軌按鈕。
-3. 點「更新本期」→ POST `/api/fund-crawl {fundId}`；18:30 前回 425、未實作 → 501、live ETF → 200 + 寫 `.funddata/etf/<ticker>/<date>.json`。
-4. 冠軍頁從 `data/fund-rank.json` 直接讀，不走 fund-crawl。
+1. 開 chart-overlay「主動式ETF」分頁 → MovesView 預設。
+   - **進場自動爬（2026/05/29）**：`FundShell` 掛載時，若台灣時間（UTC+8）為**平日且過 18:30** → 背景 POST `/api/fund-crawl {all:true}` 一次爬全 8 檔，並以 `localStorage` 旗標 `fund-autocrawl:<YYYY-MM-DD>` 確保每日只觸發一次（失敗不設旗標、下次進場重試）。週末略過（不打 API）；節慶休市由「來源日期為鍵」自動跳過（MoneyDJ 休市日仍回上個交易日 → period 已存在 → skipped）。爬取狀態以頂部 pill 顯示（資料更新中… / 已更新 N 檔 / 資料已是最新）。
+2. 切到 02 持股 → 選 ETF → 顯示當日持股。
+3. 點「更新本期」→ POST `/api/fund-crawl {fundId}`（單檔，總是覆蓋寫入）；18:30 前回 425（`{force:true}` 可繞過）、live → 200 + 寫 `.funddata/etf/<ticker>/<date>.json`。
+4. 03 冠軍從 `data/fund-rank.json`（committed snapshot）直接讀，不走 fund-crawl。
+
+### 個股流向指標（2026/05/29；歷史回填功能已移除）
+**目標**：輸入股號（如 2330）→ 上方 K 線、下方柱狀顯示「該日跨所有主動式 ETF 的淨持股股數變動」（紅=加碼/綠=減碼）。
+
+**單一來源原則（重要）**：8 檔 ETF 全部走 MoneyDJ `Basic0007B`（含 `col07 持有股數` + 來源日期）。MoneyDJ **無日期參數、只給最新**，所以流向序列只能**靠每日爬蟲往前累積**（≥2 個有股數的交易日才有 delta）。
+- **2026/05/29 重構**：原本野村 2 檔（00980A/00985A）另接 `nomurafunds.com.tw` date-aware REST 回填完整歷史，但其餘 6 檔無等價回填來源，混用會違反單一來源原則並在流向圖造成假「全出再全進」尖刺。依用戶決定**全部刪除、8 檔統一 MoneyDJ 重來**：移除 `lib/fund/history/`（nomura adapter + dispatch）、`app/api/fund-backfill`，清空 `.funddata/etf/*` 後以 `{all:true,force:true}` 重新種一輪（每檔 1 個快照）。歷史脈絡見 git log。
+- recon 備忘（為何 6 檔無回填）：群益 `capitalfund.com.tw` 被 Incapsula WAF 擋(403)；元大 `etfapi.yuantaetfs.com` 是 FuncId gateway 需瀏覽器側 recon；統一 ezmoney、復華 Excel 皆「只有當期」。野村 REST 雖可回填但屬不同源，棄用。
+
+**流向聚合** `lib/fund/flow.ts`（純）：`computeFlow(perEtf, code): FlowSeries`。
+- 每檔 ETF 比較自己**相鄰快照**的股數差（後一日 - 前一日），首個快照不計（不把建倉算加碼）；股票不在清單視為 0 股；delta 歸屬後一個快照日；跨 ETF 同日加總。
+- 🛡️ **無股數快照防護**：`isSharelessSnapshot()` 把「有持股清單但全無 shares 欄位」的舊快照（早期 MoneyDJ）剔除，永久根治混源假尖刺（空持股快照 length 0 不算，予以保留）。即使舊 shares-less 快照仍在硬碟，computeFlow 也會自動忽略。
+- 回 `{ code, name, points[{date,netShares,addShares,reduceShares,contributors[]}], etfsCovered[] }`。
+- API：`/api/fund?flow=CODE`（載入全 ETF 全 period 快照後 computeFlow）。
+- UI `FlowView`：lightweight-charts 單張疊圖，K 線(`CandlestickSeries`)走右軸上方、流向柱(`HistogramSeries` 逐 bar color 紅/綠)走左軸壓底；股數顯示以 ÷1000=張。`/api/stocks?...&ohlc=1` 新增 OHLC（只在帶 ohlc=1 時回 open/high/low，cache key 加 `:ohlc` 後綴，不影響既有 overlay 消費者）。
+
+### ⚠️ Data-integrity 教訓（保留）
+**Sub-agent 自生「寫實 spread」假資料事故**：曾有 implementer 自行生成 `fund-strategies.json`，graduation 6m 寫成 `0.1634` / 387 trades，與真實 (63.54% / 510 trades) 差距巨大。**Data fixture 必須 verbatim 真實 server response**，任何「我幫你補一些寫實 spread」都是 fabrication。修補後所有 fixtures 已對拍真實值（含 MoneyDJ ETF 的 byte-identical curl 驗證）。
 
 ### 待辦
-- **SITCA 月報 live**：fund-of-funds 那頁不是答案；要找對的 SITCA 頁/PDF 或換家。
-- **MoneyDJ 基金區**（`charset=big5`，仿 ETF 流程）：覆蓋全 13 檔最強候選；需 1 個 cURL 解 fund-ID pattern（DJ 用內部 6-字英數碼如 `ACIC06`）+ 13 個 ID 對應。可重用 `lib/dj.ts` 的 big5 流。
-- **cnYES 補完**：能補但缺代號+資料落後，CP 值偏低，不推。
-- **00988A 統一全球創新** 含日韓股部分，MoneyDJ 不展示——若要完整 23 檔需另案。
-- 2026/06 月初 SITCA 發 5 月資料時，要決定走哪條 live 路。
+- **流向覆蓋現況**：8 檔統一 MoneyDJ 單一來源（含股數），無歷史，自每日爬蟲累積往前。已用「進場自動爬」（過 18:30/平日，每日一次）取代手動觸發；動向頁與流向圖都隨累積天數變長。**前提是有人在平日 18:30 後開過頁面**——純前端觸發，無伺服器排程。
+- 若要保證每日都抓（即使沒人開頁）：未來可加伺服器側 cron / 排程（serverless 環境需外部觸發）。
+- **未來功能（用戶已提，尚未實作）**：單檔 ETF「連續 N 個交易日加碼/減碼」之類的訊號顯示，做出與市面 app 的差異化。
+- 之後可能：ETF vs ETF dualTrack 比較、ETF 回測（流向歷史累積後可做）。

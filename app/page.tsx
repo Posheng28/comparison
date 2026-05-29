@@ -241,7 +241,7 @@ export default function Home() {
               </button>
               <button onClick={() => setMode('fund')}
                 className={`text-xs px-3 py-1.5 transition-colors ${mode === 'fund' ? 'bg-teal-600 text-white' : 'bg-gray-800 text-gray-400 hover:text-gray-200'}`}>
-                基金
+                主動式ETF
               </button>
             </div>
 
@@ -249,7 +249,7 @@ export default function Home() {
             {segments.some((s) => s.loading) && mode === 'period' && <span className="text-xs text-gray-400 animate-pulse">載入中…</span>}
             {mode === 'disposal' && <span className="text-xs text-orange-400/70">台股注意 / 處置推演</span>}
             {mode === 'chips' && <span className="text-xs text-amber-400/70">集保大戶持股趨勢</span>}
-            {mode === 'fund'  && <span className="text-xs text-teal-400/70">基金 / 經理人持股</span>}
+            {mode === 'fund'  && <span className="text-xs text-teal-400/70">主動式 ETF 持股</span>}
           </div>
 
           <div className="flex items-center gap-1.5 flex-wrap justify-end">

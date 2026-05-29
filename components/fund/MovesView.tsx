@@ -376,26 +376,9 @@ export default function MovesView() {
       </div>
 
       {/* Subtitle */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-        <p style={{ fontSize: '0.8rem', color: 'var(--txt-dim)', margin: 0 }}>
-          投信月報 Top10 本期 vs 上期持股變化，跨 13 檔基金聚合
-        </p>
-        {/* Caveat chip */}
-        <span
-          style={{
-            display: 'inline-block',
-            background: 'var(--panel)',
-            border: '1px solid var(--line)',
-            borderRadius: 6,
-            padding: '3px 10px',
-            fontSize: '0.72rem',
-            color: 'var(--txt-mute)',
-            alignSelf: 'flex-start',
-          }}
-        >
-          月頻資料（非每日）；ETF 每日動向待資料累積
-        </span>
-      </div>
+      <p style={{ fontSize: '0.8rem', color: 'var(--txt-dim)', margin: 0 }}>
+        主動式 ETF 每日持股 本期 vs 上期變化，跨 8 檔聚合
+      </p>
 
       {/* Error state */}
       {error && (
