@@ -1216,8 +1216,9 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
 
           {/* 今日門檻 banner */}
           {(() => {
-            const focusIdx = simPrices.findIndex(p => p === null)
-            const fIdx     = focusIdx >= 0 ? focusIdx : days.length - 1
+            // 聚焦「最近一個計算日」＝卡 0（下一個真實交易日）。
+            // 舊版用 findIndex(p===null) 會在卡 0 已填即時價時跳到卡 1，導致 banner 顯示後一天（如 6/2 而非 6/1）。
+            const fIdx     = 0
             const focusDay = days[fIdx]
             if (!focusDay) return null
             const { t1, t2 } = thresh(focusDay.bp, prevCloseOf(fIdx), knownSumOf(fIdx), spreadBaseOf(fIdx), market, mAvgEff, sAvgGate)
@@ -1292,10 +1293,26 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
                             ) : <span className="text-gray-500 text-xs animate-pulse">載入中…</span>}
                           </div>
                         ))}
-                        <div className="flex flex-wrap items-center gap-x-2 text-sm pl-3 border-t border-gray-800/60 pt-1">
-                          <span className="text-gray-300">⇒ 注意門檻：6 日累積漲幅須</span>
-                          {gate != null ? <b className="text-orange-300 text-base">≥ {gate.toFixed(2)}%</b> : <span className="text-gray-500 text-xs animate-pulse">載入中…</span>}
-                          <span className="text-xs text-gray-500">（差幅須對{peExcludesSector ? '全體' : '全體＆同類'} ≥ 20%）</span>
+                        <div className="border-t border-gray-800/60 pt-1 space-y-0.5 pl-3">
+                          <div className="flex flex-wrap items-center gap-x-2 text-sm">
+                            <span className="text-gray-300">⇒ 差幅閘門下限</span>
+                            {gate != null ? <b className="text-orange-300 text-base">{gate.toFixed(2)}%</b> : <span className="text-gray-500 text-xs animate-pulse">載入中…</span>}
+                            <span className="text-xs text-gray-500">（個股 6 日累積漲幅須對{peExcludesSector ? '全體' : '全體＆同類'}均值 ≥ 20%）</span>
+                          </div>
+                          {gate != null && (() => {
+                            const { p1, p2, p3, gap } = MARKET_PCT[market]
+                            const e1 = Math.max(p1, gate), e2 = Math.max(p2, gate), e3 = Math.max(p3, gate)
+                            const binding = gate > Math.min(p1, p2, p3)
+                            return (
+                              <div className="text-xs text-gray-500 leading-relaxed">
+                                <span className="text-gray-400">實際注意門檻 ＝ max(各款基本漲幅%, 閘門 {gate.toFixed(2)}%)：</span>
+                                {' '}款一①<b className="text-gray-300">{e1.toFixed(2)}%</b>・款一②<b className="text-gray-300">{e2.toFixed(2)}%</b>+起迄價差≥{gap}元・款三<b className="text-gray-300">{e3.toFixed(2)}%</b>
+                                {binding
+                                  ? <span className="text-orange-400 block">　↑ 閘門已高於部分款別基本%，成為其實際門檻</span>
+                                  : <span className="block">　↑ 閘門 {gate.toFixed(2)}% 低於各款基本%，<b className="text-gray-400">目前不具拘束力</b>；故「累積漲幅超過閘門」≠ 會被注意——仍須達上方「⚠️ 注意觸發 ≥ 價格」才成立</span>}
+                              </div>
+                            )
+                          })()}
                         </div>
                       </>
                     )
@@ -1333,7 +1350,17 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
                 </div>
                 <div className="text-sm mt-2">
                   {state === 'hit' && (
-                    <span className="text-gray-400">※ 尚未納入「差幅 ≥ 大盤/類股」條件，此為價格面上限判斷</span>
+                    <div className="space-y-1 text-gray-400">
+                      <div>※ 第二款是「長期起迄倍漲」維度（{clause2.window} 營業日起點 → 最近收盤的漲幅），與款一/三的「6 日累積漲幅」<b>不同維度</b>，且差幅條件無法用歷史回推，故獨立判斷、此為價格面上限。</div>
+                      <div className="text-amber-300/90">
+                        🛡️ 防重複豁免規則：最近 30 日內已依第一款公布注意，<b>且</b>最近 6 日起迄漲幅 ≤ {CLAUSE2[market].dupPct}%（{market === 'TWSE' ? '上市' : '上櫃'}）→ 第二款不適用。
+                        {clause2.sixDayPct != null && isFinite(clause2.sixDayPct)
+                          ? <> 本檔最近 6 日起迄漲幅 <b>{clause2.sixDayPct.toFixed(1)}%</b>{clause2.sixDayPct > CLAUSE2[market].dupPct
+                              ? <> &gt; {CLAUSE2[market].dupPct}% → <b className="text-yellow-300">不符豁免</b>，第二款仍成立。</>
+                              : <> ≤ {CLAUSE2[market].dupPct}%，惟 30 日內無第一款注意 → <b className="text-yellow-300">不符豁免</b>，第二款仍成立。</>}</>
+                          : <> → 豁免條件未全部滿足，第二款仍成立。</>}
+                      </div>
+                    </div>
                   )}
                   {state === 'exempt' && (
                     <span className="text-sky-200">
