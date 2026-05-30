@@ -1359,7 +1359,7 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
 
       {/* Sidebar */}
       <aside className={`
-        fixed inset-y-0 left-0 z-30 w-[26rem] max-w-[90vw] bg-gray-900 border-r border-gray-800 overflow-y-auto
+        fixed inset-y-0 left-0 z-30 w-[30rem] max-w-[90vw] bg-gray-900 border-r border-gray-800 overflow-y-auto
         transition-transform duration-300 ease-in-out
         lg:static lg:translate-x-0 lg:shrink-0
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}

@@ -47,14 +47,14 @@ function ClauseBody({ r }: { r: ClauseResult }) {
       </p>
       {r.groups.map((g, gi) => (
         <div key={gi} className="rounded-lg border border-gray-800 bg-gray-900/40 p-2">
-          <div className="flex items-center justify-between gap-2">
-            <span className="text-xs font-semibold text-gray-200">{g.title}</span>
-            <span className="text-[11px] text-gray-400">{g.threshold}</span>
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+            <span className="text-xs font-semibold text-gray-200 shrink-0">{g.title}</span>
+            <span className="text-[11px] text-gray-400 flex-1 min-w-0">{g.threshold}</span>
             <StatusPill s={g.status} />
           </div>
           <ul className="mt-1 space-y-0.5">
             {g.subs.map((s, si) => (
-              <li key={si} className="flex items-baseline gap-1.5 text-[11px]">
+              <li key={si} className="flex flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-[11px]">
                 <span className="text-gray-400 shrink-0">{s.label}</span>
                 <span className="text-gray-500">{s.threshold}</span>
                 {s.current && <span className="text-gray-200 font-medium">{s.current}</span>}
