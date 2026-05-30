@@ -1040,8 +1040,9 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
             </div>
 
             {i === 0 && (
-              <div className="mt-1 space-y-0.5 text-xs border-l-2 border-gray-700 pl-2">
-                <p className="text-gray-500">差幅閘門（{peExcludesSector ? '僅全體 ≥20%・PE 異常排除同類' : '須全體＆同類皆 ≥20%'}）</p>
+              <details className="mt-1 text-xs border-l-2 border-gray-700 pl-2">
+                <summary className="cursor-pointer text-gray-500 hover:text-gray-300 select-none">差幅閘門（{peExcludesSector ? '僅全體 ≥20%・PE 異常排除同類' : '須全體＆同類皆 ≥20%'}）</summary>
+                <div className="space-y-0.5 mt-1">
                 {[
                   { label: `全體${market === 'TWSE' ? '上市' : '上櫃'}`, avg: mAvgEff, excluded: false },
                   { label: `同類${sectorAvg?.sectorCode ?? ''}`, avg: sAvgPct, excluded: peExcludesSector },
@@ -1057,7 +1058,8 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
                     </p>
                   )
                 })}
-              </div>
+                </div>
+              </details>
             )}
 
             <div className="min-h-[22px] flex items-center gap-1.5 flex-wrap">
@@ -1141,30 +1143,212 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
               <div className={`text-xs font-semibold mt-0.5 ${col}`}>
                 {done ? '❌ 觸發' : close ? '⚠️ 警告' : '✓ 安全'}
               </div>
-              {r.consec ? (
-                // 連續規則：連續計數，中間任一(已完成)交易日無注意即歸零
-                <div className="text-[10px] text-gray-500 mt-1.5 pt-1.5 border-t border-gray-700/50">
-                  連續計數·中斷即歸零（截至 {md(rules.ref)} 前一完成交易日）
-                </div>
-              ) : (
-                // 窗口規則：數窗口內筆數
-                <>
-                  <div className="text-[10px] text-gray-500 mt-1.5 pt-1.5 border-t border-gray-700/50">
-                    窗口 {md(r.win.from)}~{md(r.win.to)}
+              <details className="mt-1.5 pt-1.5 border-t border-gray-700/50">
+                <summary className="cursor-pointer text-[10px] text-gray-500 hover:text-gray-300 select-none">明細</summary>
+                {r.consec ? (
+                  // 連續規則：連續計數，中間任一(已完成)交易日無注意即歸零
+                  <div className="text-[10px] text-gray-500 mt-1">
+                    連續計數·中斷即歸零（截至 {md(rules.ref)} 前一完成交易日）
                   </div>
-                  <div className="text-[10px] mt-0.5">
-                    {r.win.confirmed.length > 0
-                      ? <span className="text-yellow-500">已含 {r.win.confirmed.length} 確定：{r.win.confirmed.map(md).join('、')}</span>
-                      : <span className="text-gray-600">無確定注意</span>}
-                  </div>
-                </>
-              )}
+                ) : (
+                  // 窗口規則：數窗口內筆數
+                  <>
+                    <div className="text-[10px] text-gray-500 mt-1">
+                      窗口 {md(r.win.from)}~{md(r.win.to)}
+                    </div>
+                    <div className="text-[10px] mt-0.5">
+                      {r.win.confirmed.length > 0
+                        ? <span className="text-yellow-500">已含 {r.win.confirmed.length} 確定：{r.win.confirmed.map(md).join('、')}</span>
+                        : <span className="text-gray-600">無確定注意</span>}
+                    </div>
+                  </>
+                )}
+              </details>
             </div>
           )
         })}
       </div>
     </div>
   )
+
+  /* ── 答案卡（hero）：答案優先，細節收進 <details> ─────────────────────────────── */
+  const heroCard = (() => {
+    const focusDay = days[0]
+    if (!focusDay) return null
+    const prevClose0  = prevCloseOf(0)
+    const sumKnown    = knownSumOf(0)
+    const spreadBase0 = spreadBaseOf(0)
+    const { t1, t2 }  = thresh(focusDay.bp, prevClose0, sumKnown, spreadBase0, market, mAvgEff, sAvgGate)
+    const { maxP }    = getDayBounds(0, simPrices, days)
+    const c1          = mergeC1(t1, t2, maxP)
+    const chosen0     = simPrices[0]
+    const simulated   = chosen0 != null
+    const curPrice    = simulated ? chosen0! : prevClose0
+    const { p1, p2, gap } = MARKET_PCT[market]
+    const gateVals    = [mAvgEff, sAvgGate].filter((x): x is number => x != null)
+    const gate        = gateVals.length ? Math.max(...gateVals) + 20 : null
+    const eff1        = gate != null ? Math.max(p1, gate) : p1
+    const eff2        = gate != null ? Math.max(p2, gate) : p2
+    const cum         = sumKnown + (prevClose0 > 0 ? trunc2((curPrice - prevClose0) / prevClose0 * 100) : 0)
+    const spread      = curPrice - spreadBase0
+    const toNotice    = c1.price - curPrice
+    const stockName   = importStatus.stockName
+    const mktLabel    = market === 'TWSE' ? '上市' : '上櫃'
+
+    // 「卡在哪一條」：款一①(漲幅)、款一②(起迄價差)，依『觸發價距現價』由近到遠排序
+    const rows = [
+      { id: '款一①', desc: '6 日累積漲幅',
+        cur: `${cum > 0 ? '+' : ''}${cum.toFixed(2)}%`, need: `${eff1.toFixed(2)}%`,
+        remain: cum >= eff1 - 1e-9 ? null : `還差 ${(eff1 - cum).toFixed(2)}%`,
+        trig: t1, fired: cum >= eff1 - 1e-9 },
+      { id: '款一②', desc: `起迄價差（另需累積 ≥ ${eff2.toFixed(0)}%）`,
+        cur: `${fNum(spread)} 元`, need: `${gap} 元`,
+        remain: spread >= gap - 1e-9 ? null : `還差 ${fNum(gap - spread)} 元`,
+        trig: t2, fired: curPrice >= t2 - 1e-9 },
+    ].sort((a, b) => (a.trig - curPrice) - (b.trig - curPrice))
+
+    const distChips: [string, number, number][] = [
+      ['①連3日第一款', rules.c1, 3], ['②連5日注意', rules.ca, 5],
+      ['③10日6次', rules.c10, 6], ['④30日12次', rules.c30, 12],
+    ]
+
+    return (
+      <div className="rounded-xl border border-gray-700 bg-gray-900 p-4 space-y-3">
+        {/* 識別 + 計算日 */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+          {stockName && <span className="text-base font-bold text-gray-100">{stockName}{queryCode ? `（${queryCode.toUpperCase()}）` : ''}</span>}
+          <span className={`text-xs px-1.5 py-0.5 rounded font-semibold ${market === 'TWSE' ? 'bg-blue-950 text-blue-400 border border-blue-800' : 'bg-purple-950 text-purple-400 border border-purple-800'}`}>
+            {mktLabel} {market === 'TWSE' ? '32/25%' : '30/23%'}
+          </span>
+          <span className="text-gray-200 font-bold">📅 {calcMD(focusDay)} 計算日</span>
+          <span className="text-gray-500 text-sm">基準 {baseMD(focusDay)} / {fNum(focusDay.bp)}</span>
+        </div>
+
+        {/* 答案：現價 → 注意線 */}
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 border-t border-gray-800 pt-3">
+          <span className="text-gray-400 text-sm">{simulated ? '模擬現價' : '最近收盤'}</span>
+          <span className="text-2xl font-extrabold text-gray-100">{fNum(curPrice)}</span>
+          <span className="text-gray-600 text-xl">→</span>
+          <span className="text-gray-400 text-sm">⚠️ 注意線</span>
+          <span className={`text-2xl font-extrabold ${c1.feasible ? 'text-red-400' : 'text-gray-500'}`}>{fNum(c1.price)}</span>
+          <span className="text-xs text-gray-500">款一{c1.std}</span>
+          {toNotice > 1e-9
+            ? <span className="text-amber-400 text-sm font-semibold">離現價 +{fNum(toNotice)} 元</span>
+            : <span className="text-red-400 text-sm font-semibold">已突破注意線</span>}
+          {!c1.feasible && <span className="text-xs text-gray-500">（漲停 {fNum(maxP)} 外，單日拖不到）</span>}
+        </div>
+
+        {/* 卡在哪一條 */}
+        <div className="space-y-1 border-t border-gray-800 pt-3">
+          <div className="text-xs text-gray-500 mb-1">卡在哪一條（距現價由近到遠）</div>
+          {rows.map((r, idx) => (
+            <div key={r.id} className="flex flex-wrap items-center gap-x-2 text-sm">
+              <span className={`font-semibold w-16 ${r.fired ? 'text-red-400' : 'text-gray-200'}`}>{r.id}</span>
+              <span className="text-gray-400 flex-1 min-w-[8rem]">{r.desc}</span>
+              <span className="font-mono text-gray-300">{r.cur}<span className="text-gray-600"> / {r.need}</span></span>
+              {r.remain
+                ? <span className="text-amber-400 text-xs whitespace-nowrap">{r.remain}</span>
+                : <span className="text-red-400 text-xs whitespace-nowrap">已達</span>}
+              <span className="text-gray-500 text-xs whitespace-nowrap">觸發 ≥ {fNum(r.trig)}</span>
+              {idx === 0 && !r.fired && <span className="text-amber-400 text-xs">◀ 最近</span>}
+            </div>
+          ))}
+          {clause2.triggered && (
+            <div className="flex flex-wrap items-center gap-x-2 text-sm">
+              <span className={`font-semibold w-16 ${clause2.exempt ? 'text-sky-400' : 'text-yellow-400'}`}>款二</span>
+              <span className="text-gray-400 flex-1 min-w-[8rem]">長期起迄倍漲（不同維度）</span>
+              <span className="font-mono text-gray-300">{clause2.window}日 {clause2.pct?.toFixed(1)}%</span>
+              <span className={`text-xs whitespace-nowrap ${clause2.exempt ? 'text-sky-400' : 'text-yellow-400'}`}>{clause2.exempt ? '已豁免' : '已觸發'}</span>
+            </div>
+          )}
+        </div>
+
+        {/* 處置距離 */}
+        <div className="flex flex-wrap gap-2 border-t border-gray-800 pt-3">
+          {distChips.map(([label, cur, max]) => {
+            const done = cur >= max, close = !done && cur >= max - 1
+            const col = done ? 'text-red-300 border-red-700 bg-red-950/40'
+              : close ? 'text-yellow-300 border-yellow-700 bg-yellow-950/30'
+              : 'text-gray-400 border-gray-700 bg-gray-800/40'
+            return (
+              <span key={label} className={`text-xs px-2 py-1 rounded-lg border ${col}`}>
+                {label} <b className="font-mono">{cur}/{max}</b>
+              </span>
+            )
+          })}
+        </div>
+
+        {/* 差幅閘門明細（預設收合） */}
+        <details className="border-t border-gray-800 pt-2">
+          <summary className="cursor-pointer text-sm text-gray-400 hover:text-gray-200 select-none">
+            📊 差幅閘門明細（款一①②・款三共用判定基底）
+          </summary>
+          <div className="mt-2 space-y-1 border-l-2 border-gray-700 pl-3">
+            <div className="text-xs text-gray-500">
+              近 6 日{marketAvg.baseDate && marketAvg.lastClosedDate ? `（${marketAvg.baseDate.slice(4, 6)}/${marketAvg.baseDate.slice(6)}→${marketAvg.lastClosedDate.slice(4, 6)}/${marketAvg.lastClosedDate.slice(6)}）` : ''}・已知 5 間隔，當日（第 6 間隔）以 0% 計
+            </div>
+            {(mAvgEff != null || sAvgPct != null) ? (() => {
+              const hi    = gateVals.length ? Math.max(...gateVals) : null
+              const peVal = peData?.pe ?? null
+              const detailRows = [
+                { label: `全體${mktLabel}均值`, v: mAvgEff, excluded: false },
+                { label: `同類均值${sectorAvg?.sectorCode ? `（類${sectorAvg.sectorCode}）` : ''}`, v: sAvgPct, excluded: peExcludesSector },
+              ]
+              return (
+                <>
+                  {detailRows.map(({ label, v, excluded }) => (
+                    <div key={label} className="flex flex-wrap items-center gap-x-2 text-sm">
+                      <span className={`w-32 ${excluded ? 'text-gray-500 line-through' : 'text-gray-400'}`}>{label}</span>
+                      {v != null ? (
+                        excluded ? (
+                          <>
+                            <b className="w-16 text-right text-gray-500 line-through">{v > 0 ? '+' : ''}{v.toFixed(2)}%</b>
+                            <span className="text-xs text-sky-400">
+                              PE {peVal != null ? peVal.toFixed(1) : '—'} {peVal != null && peVal < 0 ? '為負' : `≥ ${SECTOR_PE_LIMIT[market]}`} → 不適用類股規定
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <b className={`w-16 text-right ${v >= 0 ? 'text-red-400' : 'text-green-400'}`}>{v > 0 ? '+' : ''}{v.toFixed(2)}%</b>
+                            <span className="text-gray-600">＋20%＝</span>
+                            <b className="text-orange-300">{(v + 20).toFixed(2)}%</b>
+                            {v === hi && <span className="text-xs text-orange-400">← 取較高者為門檻</span>}
+                          </>
+                        )
+                      ) : <span className="text-gray-500 text-xs animate-pulse">載入中…</span>}
+                    </div>
+                  ))}
+                  <div className="border-t border-gray-800/60 pt-1 space-y-0.5">
+                    <div className="flex flex-wrap items-center gap-x-2 text-sm">
+                      <span className="text-gray-300">⇒ 差幅閘門下限</span>
+                      {gate != null ? <b className="text-orange-300 text-base">{gate.toFixed(2)}%</b> : <span className="text-gray-500 text-xs animate-pulse">載入中…</span>}
+                      <span className="text-xs text-gray-500">（個股 6 日累積漲幅須對{peExcludesSector ? '全體' : '全體＆同類'}均值 ≥ 20%）</span>
+                    </div>
+                    {gate != null && (() => {
+                      const { p1: q1, p2: q2, p3: q3, gap: qg } = MARKET_PCT[market]
+                      const e1 = Math.max(q1, gate), e2 = Math.max(q2, gate), e3 = Math.max(q3, gate)
+                      const binding = gate > Math.min(q1, q2, q3)
+                      return (
+                        <div className="text-xs text-gray-500 leading-relaxed">
+                          <span className="text-gray-400">實際注意門檻 ＝ max(各款基本漲幅%, 閘門 {gate.toFixed(2)}%)：</span>
+                          {' '}款一①<b className="text-gray-300">{e1.toFixed(2)}%</b>・款一②<b className="text-gray-300">{e2.toFixed(2)}%</b>+起迄價差≥{qg}元・款三<b className="text-gray-300">{e3.toFixed(2)}%</b>
+                          {binding
+                            ? <span className="text-orange-400 block">　↑ 閘門已高於部分款別基本%，成為其實際門檻</span>
+                            : <span className="block">　↑ 閘門 {gate.toFixed(2)}% 低於各款基本%，<b className="text-gray-400">目前不具拘束力</b>；故「累積漲幅超過閘門」≠ 會被注意——仍須達上方注意線價格才成立</span>}
+                        </div>
+                      )
+                    })()}
+                  </div>
+                </>
+              )
+            })() : (
+              <span className="text-gray-500 text-sm animate-pulse">全體均值載入中…</span>
+            )}
+          </div>
+        </details>
+      </div>
+    )
+  })()
 
   /* ── Render ──────────────────────────────────────────────────────────────── */
   return (
@@ -1214,115 +1398,8 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
             </div>
           </div>
 
-          {/* 今日門檻 banner */}
-          {(() => {
-            // 聚焦「最近一個計算日」＝卡 0（下一個真實交易日）。
-            // 舊版用 findIndex(p===null) 會在卡 0 已填即時價時跳到卡 1，導致 banner 顯示後一天（如 6/2 而非 6/1）。
-            const fIdx     = 0
-            const focusDay = days[fIdx]
-            if (!focusDay) return null
-            const { t1, t2 } = thresh(focusDay.bp, prevCloseOf(fIdx), knownSumOf(fIdx), spreadBaseOf(fIdx), market, mAvgEff, sAvgGate)
-            return (
-              <div className="p-3 rounded-xl bg-gray-900 border border-gray-700 flex flex-wrap items-center gap-x-6 gap-y-1.5">
-                <div className="flex items-center gap-2">
-                  <span className="text-gray-200 font-bold text-base">📅 {calcMD(focusDay)} 計算日</span>
-                  <span className="text-gray-500 text-sm">基準 {baseMD(focusDay)} / {fNum(focusDay.bp)}</span>
-                  <span className={`text-xs px-1.5 py-0.5 rounded font-semibold ${market === 'TWSE' ? 'bg-blue-950 text-blue-400 border border-blue-800' : 'bg-purple-950 text-purple-400 border border-purple-800'}`}>
-                    {market === 'TWSE' ? '上市 32/25%' : '上櫃 30/23%'}
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center gap-4">
-                  {(() => {
-                    const lu = getDayBounds(fIdx, simPrices, days).maxP
-                    const c1 = mergeC1(t1, t2, lu)
-                    return (
-                      <>
-                        <span className="text-sm">
-                          <span className="text-gray-400">⚠️ 注意觸發 ≥ </span>
-                          <b className={`text-base ${c1.feasible ? 'text-red-400' : 'text-gray-500'}`}>{fNum(c1.price)}</b>
-                          <span className="text-xs text-gray-500 ml-1">款一{c1.std}</span>
-                          {c1.feasible
-                            ? <span className="text-xs text-amber-400 ml-1">・漲停 {fNum(lu)} 內可達</span>
-                            : <span className="text-xs text-gray-500 ml-1">・漲停 {fNum(lu)} 外，單日拖不到</span>}
-                        </span>
-                        <span className="text-sm text-green-500">安全 &lt; {fNum(c1.price)}</span>
-                      </>
-                    )
-                  })()}
-                </div>
-
-                {/* 全體/同類差幅閘門（款一①②、款三共用判定基底；逐項條列） */}
-                <div className="w-full border-t border-gray-800 pt-2 space-y-1">
-                  <div className="flex flex-wrap items-center gap-x-2 text-sm text-gray-300">
-                    <span className="font-semibold">📊 差幅閘門</span>
-                    <span className="text-xs text-gray-500">款一①②・款三共用</span>
-                    <span className="text-xs text-gray-500">
-                      近 6 日{marketAvg.baseDate && marketAvg.lastClosedDate ? `（${marketAvg.baseDate.slice(4, 6)}/${marketAvg.baseDate.slice(6)}→${marketAvg.lastClosedDate.slice(4, 6)}/${marketAvg.lastClosedDate.slice(6)}）` : ''}・已知 5 間隔，當日（第 6 間隔）以 0% 計
-                    </span>
-                  </div>
-                  {(mAvgEff != null || sAvgPct != null) ? (() => {
-                    const gateVals = [mAvgEff, sAvgGate].filter((x): x is number => x != null)
-                    const hi   = gateVals.length ? Math.max(...gateVals) : null
-                    const gate = hi != null ? hi + 20 : null
-                    const peVal = peData?.pe ?? null
-                    const rows = [
-                      { label: `全體${market === 'TWSE' ? '上市' : '上櫃'}均值`, v: mAvgEff, excluded: false },
-                      { label: `同類均值${sectorAvg?.sectorCode ? `（類${sectorAvg.sectorCode}）` : ''}`, v: sAvgPct, excluded: peExcludesSector },
-                    ]
-                    return (
-                      <>
-                        {rows.map(({ label, v, excluded }) => (
-                          <div key={label} className="flex flex-wrap items-center gap-x-2 text-sm pl-3">
-                            <span className={`w-32 ${excluded ? 'text-gray-500 line-through' : 'text-gray-400'}`}>{label}</span>
-                            {v != null ? (
-                              excluded ? (
-                                <>
-                                  <b className="w-16 text-right text-gray-500 line-through">{v > 0 ? '+' : ''}{v.toFixed(2)}%</b>
-                                  <span className="text-xs text-sky-400">
-                                    PE {peVal != null ? peVal.toFixed(1) : '—'} {peVal != null && peVal < 0 ? '為負' : `≥ ${SECTOR_PE_LIMIT[market]}`} → 不適用類股規定
-                                  </span>
-                                </>
-                              ) : (
-                                <>
-                                  <b className={`w-16 text-right ${v >= 0 ? 'text-red-400' : 'text-green-400'}`}>{v > 0 ? '+' : ''}{v.toFixed(2)}%</b>
-                                  <span className="text-gray-600">＋20%＝</span>
-                                  <b className="text-orange-300">{(v + 20).toFixed(2)}%</b>
-                                  {v === hi && <span className="text-xs text-orange-400">← 取較高者為門檻</span>}
-                                </>
-                              )
-                            ) : <span className="text-gray-500 text-xs animate-pulse">載入中…</span>}
-                          </div>
-                        ))}
-                        <div className="border-t border-gray-800/60 pt-1 space-y-0.5 pl-3">
-                          <div className="flex flex-wrap items-center gap-x-2 text-sm">
-                            <span className="text-gray-300">⇒ 差幅閘門下限</span>
-                            {gate != null ? <b className="text-orange-300 text-base">{gate.toFixed(2)}%</b> : <span className="text-gray-500 text-xs animate-pulse">載入中…</span>}
-                            <span className="text-xs text-gray-500">（個股 6 日累積漲幅須對{peExcludesSector ? '全體' : '全體＆同類'}均值 ≥ 20%）</span>
-                          </div>
-                          {gate != null && (() => {
-                            const { p1, p2, p3, gap } = MARKET_PCT[market]
-                            const e1 = Math.max(p1, gate), e2 = Math.max(p2, gate), e3 = Math.max(p3, gate)
-                            const binding = gate > Math.min(p1, p2, p3)
-                            return (
-                              <div className="text-xs text-gray-500 leading-relaxed">
-                                <span className="text-gray-400">實際注意門檻 ＝ max(各款基本漲幅%, 閘門 {gate.toFixed(2)}%)：</span>
-                                {' '}款一①<b className="text-gray-300">{e1.toFixed(2)}%</b>・款一②<b className="text-gray-300">{e2.toFixed(2)}%</b>+起迄價差≥{gap}元・款三<b className="text-gray-300">{e3.toFixed(2)}%</b>
-                                {binding
-                                  ? <span className="text-orange-400 block">　↑ 閘門已高於部分款別基本%，成為其實際門檻</span>
-                                  : <span className="block">　↑ 閘門 {gate.toFixed(2)}% 低於各款基本%，<b className="text-gray-400">目前不具拘束力</b>；故「累積漲幅超過閘門」≠ 會被注意——仍須達上方「⚠️ 注意觸發 ≥ 價格」才成立</span>}
-                              </div>
-                            )
-                          })()}
-                        </div>
-                      </>
-                    )
-                  })() : (
-                    <span className="text-gray-500 text-sm animate-pulse pl-3">全體均值載入中…</span>
-                  )}
-                </div>
-              </div>
-            )
-          })()}
+          {/* 答案卡（hero）：答案優先，差幅閘門明細收進 details */}
+          {heroCard}
 
           {/* ── 第二款狀態（依實際歷史股價，常駐顯示）── */}
           {priceHistory.length >= 31 && (() => {
@@ -1350,17 +1427,20 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
                 </div>
                 <div className="text-sm mt-2">
                   {state === 'hit' && (
-                    <div className="space-y-1 text-gray-400">
-                      <div>※ 第二款是「長期起迄倍漲」維度（{clause2.window} 營業日起點 → 最近收盤的漲幅），與款一/三的「6 日累積漲幅」<b>不同維度</b>，且差幅條件無法用歷史回推，故獨立判斷、此為價格面上限。</div>
-                      <div className="text-amber-300/90">
-                        🛡️ 防重複豁免規則：最近 30 日內已依第一款公布注意，<b>且</b>最近 6 日起迄漲幅 ≤ {CLAUSE2[market].dupPct}%（{market === 'TWSE' ? '上市' : '上櫃'}）→ 第二款不適用。
-                        {clause2.sixDayPct != null && isFinite(clause2.sixDayPct)
-                          ? <> 本檔最近 6 日起迄漲幅 <b>{clause2.sixDayPct.toFixed(1)}%</b>{clause2.sixDayPct > CLAUSE2[market].dupPct
-                              ? <> &gt; {CLAUSE2[market].dupPct}% → <b className="text-yellow-300">不符豁免</b>，第二款仍成立。</>
-                              : <> ≤ {CLAUSE2[market].dupPct}%，惟 30 日內無第一款注意 → <b className="text-yellow-300">不符豁免</b>，第二款仍成立。</>}</>
-                          : <> → 豁免條件未全部滿足，第二款仍成立。</>}
+                    <details className="text-gray-400">
+                      <summary className="cursor-pointer hover:text-gray-200 select-none">為什麼第二款獨立？防重複豁免判定</summary>
+                      <div className="space-y-1 mt-1.5">
+                        <div>※ 第二款是「長期起迄倍漲」維度（{clause2.window} 營業日起點 → 最近收盤的漲幅），與款一/三的「6 日累積漲幅」<b>不同維度</b>，且差幅條件無法用歷史回推，故獨立判斷、此為價格面上限。</div>
+                        <div className="text-amber-300/90">
+                          🛡️ 防重複豁免規則：最近 30 日內已依第一款公布注意，<b>且</b>最近 6 日起迄漲幅 ≤ {CLAUSE2[market].dupPct}%（{market === 'TWSE' ? '上市' : '上櫃'}）→ 第二款不適用。
+                          {clause2.sixDayPct != null && isFinite(clause2.sixDayPct)
+                            ? <> 本檔最近 6 日起迄漲幅 <b>{clause2.sixDayPct.toFixed(1)}%</b>{clause2.sixDayPct > CLAUSE2[market].dupPct
+                                ? <> &gt; {CLAUSE2[market].dupPct}% → <b className="text-yellow-300">不符豁免</b>，第二款仍成立。</>
+                                : <> ≤ {CLAUSE2[market].dupPct}%，惟 30 日內無第一款注意 → <b className="text-yellow-300">不符豁免</b>，第二款仍成立。</>}</>
+                            : <> → 豁免條件未全部滿足，第二款仍成立。</>}
+                        </div>
                       </div>
-                    </div>
+                    </details>
                   )}
                   {state === 'exempt' && (
                     <span className="text-sky-200">
