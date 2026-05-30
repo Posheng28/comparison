@@ -1,6 +1,6 @@
 // lib/disposal/__tests__/marketData.test.ts
 import { describe, it, expect } from 'vitest'
-import { cumulativeMap, eqAvg } from '@/lib/disposal/marketData'
+import { cumulativeMap, eqAvg, parseSharesTwse, parseSharesTpex } from '@/lib/disposal/marketData'
 
 describe('cumulativeMap', () => {
   it('每檔逐日 trunc2 後相加，僅納入全期都有的代號', () => {
@@ -36,5 +36,31 @@ describe('eqAvg', () => {
   })
   it('空集合回 null', () => {
     expect(eqAvg({}).avg).toBeNull()
+  })
+})
+
+describe('parseSharesTwse（MI_QFIIS row[0]=代號 row[3]=發行股數）', () => {
+  it('解析普通股、千分位逗號去除；過濾非普通股', () => {
+    const rows = [
+      ['2327', '國巨', 'x', '2,071,465,484'],
+      ['0050', '元大台灣50', 'x', '1,000,000'],   // ETF → 過濾
+      ['1101', '台泥', 'x', '6,000,000,000'],
+    ] as string[][]
+    const m = parseSharesTwse(rows)
+    expect(m['2327']).toBe(2071465484)
+    expect(m['1101']).toBe(6000000000)
+    expect(m['0050']).toBeUndefined()
+  })
+})
+
+describe('parseSharesTpex（NumberOfSharesIssued）', () => {
+  it('解析普通股股數；過濾非普通股', () => {
+    const arr = [
+      { SecuritiesCompanyCode: '6488', NumberOfSharesIssued: '478113725' },
+      { SecuritiesCompanyCode: '00679B', NumberOfSharesIssued: '123' }, // 債券ETF → 過濾
+    ]
+    const m = parseSharesTpex(arr)
+    expect(m['6488']).toBe(478113725)
+    expect(m['00679B']).toBeUndefined()
   })
 })

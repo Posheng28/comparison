@@ -91,6 +91,57 @@ export async function fetchSectorMap(market: Market): Promise<Record<string, str
   return out
 }
 
+/** MI_QFIIS 列 → { 普通股代號: 發行股數(股) }（row[0]=代號 row[3]=發行股數，去逗號） */
+export function parseSharesTwse(rows: string[][]): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const row of rows) {
+    const code = String(row[0]).trim(); if (!isOrd(code)) continue
+    const n = idxNum(row[3]); if (n == null || n <= 0) continue
+    out[code] = n
+  }
+  return out
+}
+/** tpex_3insti_qfii 陣列 → { 普通股代號: 發行股數(股) } */
+export function parseSharesTpex(arr: { SecuritiesCompanyCode?: string; NumberOfSharesIssued?: string }[]): Record<string, number> {
+  const out: Record<string, number> = {}
+  for (const x of arr) {
+    const code = String(x.SecuritiesCompanyCode ?? '').trim(); if (!isOrd(code)) continue
+    const n = idxNum(x.NumberOfSharesIssued); if (n == null || n <= 0) continue
+    out[code] = n
+  }
+  return out
+}
+
+/** 全市場發行股數對照 { code: 股數(股) }；上市 MI_QFIIS、上櫃 tpex_3insti_qfii。快取 24h。失敗回 null。 */
+export async function fetchIssuedShares(market: Market): Promise<Record<string, number> | null> {
+  const key = `issuedshares:${market}`
+  const cached = getCached(key); if (cached) return cached as Record<string, number>
+  try {
+    if (market === 'TWSE') {
+      // MI_QFIIS 為當日盤後報表：非交易日/盤中發布前查無 → 往前找最近有資料的交易日（發行股數近乎靜態，最多回溯 10 天）
+      const baseMs = Date.now() + 8 * 3600 * 1000
+      for (let i = 0; i < 10; i++) {
+        const ymd = new Date(baseMs - i * 86400000).toISOString().slice(0, 10).replace(/-/g, '')
+        const res = await fetch(`https://www.twse.com.tw/rwd/zh/fund/MI_QFIIS?response=json&date=${ymd}&selectType=ALLBUT0999`, { headers: { 'User-Agent': UA } })
+        if (!res.ok) continue
+        const j = (await res.json()) as { stat?: string; data?: string[][] }
+        if (j.stat === 'OK' && j.data?.length) {
+          const out = parseSharesTwse(j.data)
+          if (Object.keys(out).length) { setCached(key, out, 24 * 60 * 60 * 1000); return out }
+        }
+      }
+    } else {
+      const res = await fetch('https://www.tpex.org.tw/openapi/v1/tpex_3insti_qfii', { headers: { 'User-Agent': UA } })
+      if (res.ok) {
+        const arr = (await res.json()) as { SecuritiesCompanyCode?: string; NumberOfSharesIssued?: string }[]
+        const out = parseSharesTpex(arr)
+        if (Object.keys(out).length) { setCached(key, out, 24 * 60 * 60 * 1000); return out }
+      }
+    }
+  } catch { /* 回 null */ }
+  return null
+}
+
 /** 每檔個股累積% = 逐日 trunc2 後相加；只納入「全期 snapshot 都有」的代號 */
 export function cumulativeMap(snaps: Record<string, number>[]): Record<string, number> {
   if (!snaps.length) return {}
