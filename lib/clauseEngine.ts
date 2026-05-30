@@ -36,6 +36,12 @@ const PCT = {
     c6Turnover: 5, c6MinLot: 2000, c6PbrMult: 2 },
 }
 
+// 類股規定 PE 門檻：個股 PE 為負(虧損)或 ≥ 此倍數(上市60/上櫃65) → 差幅閘門「不採計同類均值」，僅看全體。
+// （法規：本益比為負數或過高者，不適用同類股漲跌幅比較規定。）
+export const SECTOR_PE_LIMIT: Record<Market, number> = { TWSE: PCT.TWSE.pe, TPEx: PCT.TPEx.pe }
+export const sectorAppliesForPe = (market: Market, pe: number | null): boolean =>
+  !(pe != null && (pe < 0 || pe >= PCT[market].pe))
+
 export interface ClauseInput {
   market: Market
   prevClose: number
@@ -63,13 +69,17 @@ const diffGate = (m: number | null, s: number | null): number => {
 const priceForCum = (prevClose: number, sumKnown: number, x: number) => prevClose * (1 + (x - sumKnown) / 100)
 const cumAt = (inp: ClauseInput, p: number) => inp.sumKnown + trunc2(inp.prevClose > 0 ? (p - inp.prevClose) / inp.prevClose * 100 : 0)
 const cumOf = (inp: ClauseInput) => cumAt(inp, inp.price)
-const effCum = (inp: ClauseInput, base: number) => Math.max(base, diffGate(inp.marketAvg6, inp.sectorAvg6))
+// 類股規定不適用時（PE 為負/過高）→ 差幅閘門剔除同類均值，僅看全體（與 exC1/c4 的 PE 除外條件一致）
+const effSector = (inp: ClauseInput): number | null => sectorAppliesForPe(inp.market, inp.pe) ? inp.sectorAvg6 : null
+const effCum = (inp: ClauseInput, base: number) => Math.max(base, diffGate(inp.marketAvg6, effSector(inp)))
 const t3Of   = (inp: ClauseInput) => nextTick(priceForCum(inp.prevClose, inp.sumKnown, effCum(inp, PCT[inp.market].c3)))
 
-// 差幅閘門子列（顯示「門檻base%→eff%」拉高門檻）
+// 差幅閘門子列（顯示「門檻base%→eff%」拉高門檻）；同類是否計入依 PE 而定
 function diffSub(inp: ClauseInput, base: number): SubCond {
   const eff = effCum(inp, base)
-  return { label: '差幅', threshold: `門檻${base}%→${eff.toFixed(2)}%`, status: 'raised', note: '需超出全體及同類均值 20% 以上' }
+  const sectorOn = effSector(inp) != null
+  return { label: '差幅', threshold: `門檻${base}%→${eff.toFixed(2)}%`, status: 'raised',
+    note: sectorOn ? '需超出全體及同類均值 20% 以上' : '需超出全體均值 20% 以上（PE 異常，不適用類股規定）' }
 }
 // 漲跌幅（第一條件）群組 — 款三/四/五 共用
 function priceGroup(inp: ClauseInput, t: number, base: number): CondGroup {

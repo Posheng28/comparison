@@ -1,6 +1,6 @@
 // lib/clauseEngine.test.ts
 import { describe, it, expect } from 'vitest'
-import { evalClauses, summarize, type ClauseInput, type ClauseResult } from '@/lib/clauseEngine'
+import { evalClauses, summarize, sectorAppliesForPe, SECTOR_PE_LIMIT, type ClauseInput, type ClauseResult } from '@/lib/clauseEngine'
 
 const base: ClauseInput = {
   market: 'TWSE', prevClose: 100, sumKnown: 0, price: 130, spreadBase: 100,
@@ -45,6 +45,44 @@ describe('款一差幅閘 = max(全體, 同類)+20', () => {
   it('兩者皆 null → 退回純價格門檻(32%)', () => {
     expect(find(evalClauses({ ...base, price: 133 }), '1①').fired).toBe(true)   // +33% > 32
     expect(find(evalClauses({ ...base, price: 131 }), '1①').fired).toBe(false)  // +31% < 32
+  })
+})
+
+describe('PE 為負/過高 → 差幅閘門不採計同類（不適用類股規定）', () => {
+  // marketAvg6=10、sectorAvg6=50：含同類閘=70%(需+70%→170)；剔除同類後閘=max(32,30)=32%(需>32%→132.5)
+  const hiSector = { ...base, price: 135, marketAvg6: 10, sectorAvg6: 50 }  // +35%
+  it('PE 正常(<門檻) → 同類計入，閘=70% → 款一①不觸發', () => {
+    expect(find(evalClauses({ ...hiSector, pe: 30 }), '1①').fired).toBe(false)
+  })
+  it('PE ≥ 門檻(上市60) → 剔除同類，閘退回32% → 款一①觸發', () => {
+    expect(find(evalClauses({ ...hiSector, pe: 70 }), '1①').fired).toBe(true)
+  })
+  it('PE 為負(虧損) → 剔除同類 → 款一①觸發', () => {
+    expect(find(evalClauses({ ...hiSector, pe: -5 }), '1①').fired).toBe(true)
+  })
+  it('PE 缺值(null) → 不排除同類（保守），閘=70% → 不觸發', () => {
+    expect(find(evalClauses({ ...hiSector, pe: null }), '1①').fired).toBe(false)
+  })
+  it('剔除同類時，差幅子列 note 標示「不適用類股規定」', () => {
+    const r = find(evalClauses({ ...hiSector, pe: 70 }), '1①')
+    const diff = r.groups[0].subs.find(s => s.label === '差幅')!
+    expect(diff.note).toContain('不適用類股規定')
+  })
+  it('款三/款四 共用同一閘 → PE≥門檻時亦剔除同類', () => {
+    // 款三需價達標(+門檻%)且量達標；此處只驗證價格門檻(t3)因剔除同類而下降
+    const inc = { ...hiSector, pe: 70, avgVol60: 1000, dayVolume: 5000, c3Assume: true }
+    const exc = { ...hiSector, pe: 30, avgVol60: 1000, dayVolume: 5000, c3Assume: true }
+    expect(find(evalClauses(inc), '3').fired).toBe(true)    // 閘32%→價達標 → 觸發
+    expect(find(evalClauses(exc), '3').fired).toBe(false)   // 閘70%→價未達標
+  })
+  it('sectorAppliesForPe / SECTOR_PE_LIMIT 對拍門檻(上市60/上櫃65)', () => {
+    expect(SECTOR_PE_LIMIT).toEqual({ TWSE: 60, TPEx: 65 })
+    expect(sectorAppliesForPe('TWSE', 59.9)).toBe(true)
+    expect(sectorAppliesForPe('TWSE', 60)).toBe(false)
+    expect(sectorAppliesForPe('TPEx', 64.9)).toBe(true)
+    expect(sectorAppliesForPe('TPEx', 65)).toBe(false)
+    expect(sectorAppliesForPe('TWSE', -0.1)).toBe(false)
+    expect(sectorAppliesForPe('TWSE', null)).toBe(true)
   })
 })
 

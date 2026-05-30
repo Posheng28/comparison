@@ -54,6 +54,8 @@
 
 ### 款一~十二 實作現況（2026/05 全補齊）— `lib/clauseEngine.ts`
 
+> ⚠️ **本節已過時，以上方「注意細節條件面板（2026-05-30）」為準**：引擎已收斂為**款一~六**（移除款十一價差級距 / 款十二借券）；款四(週轉率)改以**發行股數**反推硬量門檻、款五(券商集中)以假設開關落地。下方「資料不足、不判定 → 款四/五」及「款十一/十二」描述均已不適用，保留僅供脈絡。
+
 判定改用**原子引擎** `lib/clauseEngine.ts`：每款為純函式 evaluator → `summarize`→`{first,any}`→`computeTriggers`，live 沙盤與回測共用同一引擎。
 
 **已實作款（可判定）**
@@ -133,6 +135,10 @@
 - 發行股數：上市 MI_QFIIS `row[3]`、上櫃 tpex_3insti_qfii `NumberOfSharesIssued`（`fetchIssuedShares`，24h 快取，經 `/api/shares`）。國巨 2327=2,071,465,484 股 → 款四門檻 207,147 張（對拍 attstock）。
 - UI：`components/disposal/AttentionDetailPanel.tsx` 6 張可收合卡片，錨定計算日，盤中帶 Yahoo 即時價＋累積量。引擎為唯一真相來源，面板近乎純渲染。
 - 單位：引擎一律「張」，UI 在 evalCard 呼叫點 股→張(÷1000)。
+- ⚠️ **假設開關可見性（2026-05-30 審查修正）**：`AttentionDetailPanel` 的開關顯示只看 `card.assumeKey`（c3~c6 卡恆顯示），**不可**綁 group 的 `assumed` 狀態——該狀態本身由開關決定，綁了會造成「關掉就消失、再也開不回來」的單向陷阱（c5/c6 預設關 → 開關永遠不顯示 → 款五/款六無法觸發）。
+- 發行股數查無（盤前/非交易日 MI_QFIIS 空、上櫃端點偶發）→ `sharesOutstanding=null` → 款四/六量門檻退顯「週轉率 ≥%」、發行張數「—」，badge 轉 safe/possible，屬**正常降級**（非「無風險」，卡片以「—」示意）。
+- ⚠️ **PE 排除同類差幅閘（2026-05-30 修正）**：法規「PE 為負或 ≥門檻倍(上市60/上櫃65)不適用類股規定」→ 差幅閘門須**剔除同類均值**，僅 `全體+20%`，不可再 `max(全體,同類)+20%`。原本只在「除外條件」打勾顯示卻照用同類＝自相矛盾的 bug。引擎匯出 `sectorAppliesForPe(market,pe)` / `SECTOR_PE_LIMIT` 為單一真相，`effSector()` 依 PE 回 null；`DisposalTool` 的 `thresh()`＋兩處 📊差幅閘門顯示用 `peExcludesSector`/`sAvgGate` 同步剔除並標示原因。**差幅閘門邏輯有兩份（引擎 effCum／UI thresh），改動兩邊都要顧**。
+- 已 commit 上線（master `2ec64be`，PE 修正後另計）；`npm test` 97/97、`npm run build` 綠。
 
 ---
 

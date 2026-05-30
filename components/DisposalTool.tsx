@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { evalClauses, summarize, type ClauseResult } from '@/lib/clauseEngine'
+import { evalClauses, summarize, sectorAppliesForPe, SECTOR_PE_LIMIT, type ClauseResult } from '@/lib/clauseEngine'
 import AttentionDetailPanel from '@/components/disposal/AttentionDetailPanel'
 
 /* ── Types ─────────────────────────────────────────────────────────────────── */
@@ -701,6 +701,10 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
   const sAvgPct = sectorAvg?.sectorAvg ?? null
   // 匯入個股後，全體均值改用 sectoravg 回傳值(同窗口、排除自己)；未匯入時用 mount 載入的 marketAvg
   const mAvgEff = sectorAvg?.marketAvg ?? mAvgPct
+  // 類股規定排除：個股 PE 為負(虧損)或 ≥ 門檻倍(上市60/上櫃65) → 差幅閘門「不採計同類均值」，僅看全體。
+  // 用個股現值 PE(peData.pe) 判定；漲幅異常情境下更高價只會使 PE 更高，與引擎逐卡 pePredict 同向。
+  const peExcludesSector = !sectorAppliesForPe(market, peData?.pe ?? null)
+  const sAvgGate = peExcludesSector ? null : sAvgPct   // 進入差幅閘門計算用（排除時剔除同類）
 
   // 統一收盤時間軸：近 n 日實際收盤(各卡基準) ++ 模擬未來價(各卡計算日)；null→沿用前一日(持平)
   // 卡 i：基準=closePath[i]、計算日(預測)=closePath[i+OFFSET]、計算日前一日=closePath[i+OFFSET-1]
@@ -963,7 +967,7 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
       {days.map((d, i) => {
         const prevClose0      = prevCloseOf(i)
         const sumKnown        = knownSumOf(i)
-        const { t1, t2 }      = thresh(d.bp, prevClose0, sumKnown, spreadBaseOf(i), market, mAvgEff, sAvgPct)
+        const { t1, t2 }      = thresh(d.bp, prevClose0, sumKnown, spreadBaseOf(i), market, mAvgEff, sAvgGate)
         const { minP, maxP }  = getDayBounds(i, simPrices, days)
         const chosen          = simPrices[i]
         const prevUnset       = i > 0 && simPrices[i-1] === null
@@ -1037,17 +1041,17 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
 
             {i === 0 && (
               <div className="mt-1 space-y-0.5 text-xs border-l-2 border-gray-700 pl-2">
-                <p className="text-gray-500">差幅閘門（須全體＆同類皆 ≥20%）</p>
+                <p className="text-gray-500">差幅閘門（{peExcludesSector ? '僅全體 ≥20%・PE 異常排除同類' : '須全體＆同類皆 ≥20%'}）</p>
                 {[
-                  { label: `全體${market === 'TWSE' ? '上市' : '上櫃'}`, avg: mAvgEff },
-                  { label: `同類${sectorAvg?.sectorCode ?? ''}`, avg: sAvgPct },
-                ].map(({ label, avg }) => {
+                  { label: `全體${market === 'TWSE' ? '上市' : '上櫃'}`, avg: mAvgEff, excluded: false },
+                  { label: `同類${sectorAvg?.sectorCode ?? ''}`, avg: sAvgPct, excluded: peExcludesSector },
+                ].map(({ label, avg, excluded }) => {
                   const d = sectorAvg?.targetCum != null && avg != null ? sectorAvg.targetCum - avg : null
                   return (
-                    <p key={label} className="flex items-center gap-1.5">
+                    <p key={label} className={`flex items-center gap-1.5 ${excluded ? 'opacity-50' : ''}`}>
                       <span className="text-gray-400 w-14">{label}</span>
-                      <span className={`w-16 text-right ${(avg ?? 0) >= 0 ? 'text-red-400' : 'text-green-400'}`}>{avg != null ? `${avg > 0 ? '+' : ''}${avg.toFixed(2)}%` : '—'}</span>
-                      {d != null && (
+                      <span className={`w-16 text-right ${excluded ? 'text-gray-500 line-through' : (avg ?? 0) >= 0 ? 'text-red-400' : 'text-green-400'}`}>{avg != null ? `${avg > 0 ? '+' : ''}${avg.toFixed(2)}%` : '—'}</span>
+                      {excluded ? <span className="text-sky-400">不適用</span> : d != null && (
                         <span className={d >= 20 ? 'text-amber-400' : 'text-gray-500'}>差幅 {d.toFixed(1)}% {d >= 20 ? '✓' : '✗'}</span>
                       )}
                     </p>
@@ -1216,7 +1220,7 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
             const fIdx     = focusIdx >= 0 ? focusIdx : days.length - 1
             const focusDay = days[fIdx]
             if (!focusDay) return null
-            const { t1, t2 } = thresh(focusDay.bp, prevCloseOf(fIdx), knownSumOf(fIdx), spreadBaseOf(fIdx), market, mAvgEff, sAvgPct)
+            const { t1, t2 } = thresh(focusDay.bp, prevCloseOf(fIdx), knownSumOf(fIdx), spreadBaseOf(fIdx), market, mAvgEff, sAvgGate)
             return (
               <div className="p-3 rounded-xl bg-gray-900 border border-gray-700 flex flex-wrap items-center gap-x-6 gap-y-1.5">
                 <div className="flex items-center gap-2">
@@ -1256,31 +1260,42 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
                     </span>
                   </div>
                   {(mAvgEff != null || sAvgPct != null) ? (() => {
-                    const hi = Math.max(...[mAvgEff, sAvgPct].filter((x): x is number => x != null))
-                    const gate = hi + 20
+                    const gateVals = [mAvgEff, sAvgGate].filter((x): x is number => x != null)
+                    const hi   = gateVals.length ? Math.max(...gateVals) : null
+                    const gate = hi != null ? hi + 20 : null
+                    const peVal = peData?.pe ?? null
                     const rows = [
-                      { label: `全體${market === 'TWSE' ? '上市' : '上櫃'}均值`, v: mAvgEff },
-                      { label: `同類均值${sectorAvg?.sectorCode ? `（類${sectorAvg.sectorCode}）` : ''}`, v: sAvgPct },
+                      { label: `全體${market === 'TWSE' ? '上市' : '上櫃'}均值`, v: mAvgEff, excluded: false },
+                      { label: `同類均值${sectorAvg?.sectorCode ? `（類${sectorAvg.sectorCode}）` : ''}`, v: sAvgPct, excluded: peExcludesSector },
                     ]
                     return (
                       <>
-                        {rows.map(({ label, v }) => (
+                        {rows.map(({ label, v, excluded }) => (
                           <div key={label} className="flex flex-wrap items-center gap-x-2 text-sm pl-3">
-                            <span className="text-gray-400 w-32">{label}</span>
+                            <span className={`w-32 ${excluded ? 'text-gray-500 line-through' : 'text-gray-400'}`}>{label}</span>
                             {v != null ? (
-                              <>
-                                <b className={`w-16 text-right ${v >= 0 ? 'text-red-400' : 'text-green-400'}`}>{v > 0 ? '+' : ''}{v.toFixed(2)}%</b>
-                                <span className="text-gray-600">＋20%＝</span>
-                                <b className="text-orange-300">{(v + 20).toFixed(2)}%</b>
-                                {v === hi && <span className="text-xs text-orange-400">← 取較高者為門檻</span>}
-                              </>
+                              excluded ? (
+                                <>
+                                  <b className="w-16 text-right text-gray-500 line-through">{v > 0 ? '+' : ''}{v.toFixed(2)}%</b>
+                                  <span className="text-xs text-sky-400">
+                                    PE {peVal != null ? peVal.toFixed(1) : '—'} {peVal != null && peVal < 0 ? '為負' : `≥ ${SECTOR_PE_LIMIT[market]}`} → 不適用類股規定
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <b className={`w-16 text-right ${v >= 0 ? 'text-red-400' : 'text-green-400'}`}>{v > 0 ? '+' : ''}{v.toFixed(2)}%</b>
+                                  <span className="text-gray-600">＋20%＝</span>
+                                  <b className="text-orange-300">{(v + 20).toFixed(2)}%</b>
+                                  {v === hi && <span className="text-xs text-orange-400">← 取較高者為門檻</span>}
+                                </>
+                              )
                             ) : <span className="text-gray-500 text-xs animate-pulse">載入中…</span>}
                           </div>
                         ))}
                         <div className="flex flex-wrap items-center gap-x-2 text-sm pl-3 border-t border-gray-800/60 pt-1">
                           <span className="text-gray-300">⇒ 注意門檻：6 日累積漲幅須</span>
-                          <b className="text-orange-300 text-base">≥ {gate.toFixed(2)}%</b>
-                          <span className="text-xs text-gray-500">（差幅須對全體＆同類皆 ≥ 20%）</span>
+                          {gate != null ? <b className="text-orange-300 text-base">≥ {gate.toFixed(2)}%</b> : <span className="text-gray-500 text-xs animate-pulse">載入中…</span>}
+                          <span className="text-xs text-gray-500">（差幅須對{peExcludesSector ? '全體' : '全體＆同類'} ≥ 20%）</span>
                         </div>
                       </>
                     )
