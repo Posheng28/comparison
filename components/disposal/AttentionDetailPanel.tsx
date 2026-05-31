@@ -5,6 +5,7 @@ import type { ClauseResult, CondStatus } from '@/lib/clauseEngine'
 type AssumeKey = 'c3' | 'c4' | 'c5' | 'c6'
 interface Props {
   results: ClauseResult[]                       // evalCard(0, price0)
+  maxP: number                                  // 計算日漲停價（可達性判定用，與 heroCard 同源）
   calcDateLabel: string                         // 如 "6/02"
   statusLabel: string                           // "盤中即時" | "預估"
   assume: Record<AssumeKey, boolean>
@@ -85,7 +86,7 @@ function ClauseBody({ r }: { r: ClauseResult }) {
   )
 }
 
-export default function AttentionDetailPanel({ results, calcDateLabel, statusLabel, assume, onToggleAssume }: Props) {
+export default function AttentionDetailPanel({ results, maxP, calcDateLabel, statusLabel, assume, onToggleAssume }: Props) {
   const [open, setOpen] = useState<Record<string, boolean>>({})
   const byId = (id: ClauseResult['id']) => results.find(r => r.id === id)
 
@@ -99,7 +100,15 @@ export default function AttentionDetailPanel({ results, calcDateLabel, statusLab
         {CARDS.map(card => {
           const rs = card.ids.map(byId).filter((r): r is ClauseResult => !!r)
           if (rs.length === 0) return null
-          const badge = rs.reduce((b, r) => rank[r.badge] > rank[b] ? r.badge : b, 'safe' as ClauseResult['badge'])
+          // 表頭徽章：價格型款(priceFloor!=null)用「可達性」判定——priceFloor ≤ 漲停 maxP → 可能觸發，
+          // 否則無風險（連漲停都摸不到）；與 heroCard pickWatchSummary 同一套。無價格門檻款(款二/六)沿用引擎 badge。
+          // 不可只看 r.badge：c1 的 badge 只有 fired/safe，價格未達就直接 safe→「無風險」，
+          // 但細項列卻顯示「可能」，表頭與內容自相矛盾（user 回報）。
+          const effBadge = (r: ClauseResult): ClauseResult['badge'] =>
+            r.fired ? 'fired'
+            : r.priceFloor != null ? (r.priceFloor <= maxP + 1e-9 ? 'possible' : 'safe')
+            : r.badge
+          const badge = rs.reduce((b, r) => rank[effBadge(r)] > rank[b] ? effBadge(r) : b, 'safe' as ClauseResult['badge'])
           const isOpen = !!open[card.key]
           // 假設開關的可見性只看「這張卡是否有 assumeKey」（c3/c4/c5/c6），
           // 不可綁定 group 的 assumed 狀態：assumed 狀態本身由開關決定，會造成

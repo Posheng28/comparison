@@ -138,7 +138,6 @@ interface Clause2Result {
   triggered: boolean
   window?:   number   // 觸發的窗口（30/60/90）
   pct?:      number   // 該窗口起迄漲幅 %
-  sixDayPct?: number  // 最近6日累積漲幅 %
   exempt:    boolean  // 是否套用防重複豁免
 }
 
@@ -172,7 +171,7 @@ function checkClause2(
     if (s > 0) sixDayPct = (latest - s) / s * 100
   }
   const exempt = hasClause1 && sixDayPct <= cfg.dupPct
-  return { triggered: true, window: hit.window, pct: hit.pct, sixDayPct, exempt }
+  return { triggered: true, window: hit.window, pct: hit.pct, exempt }
 }
 
 /**
@@ -952,6 +951,7 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
         {days.length > 0 && (
           <AttentionDetailPanel
             results={evalCard(0, simPrices[0] ?? livePrice ?? startPrice)}
+            maxP={getDayBounds(0, simPrices, days).maxP}
             calcDateLabel={calcMD(days[0])}
             statusLabel={!tdClosed && dayVolume != null ? '盤中即時' : '預估'}
             assume={{ c3: c3Assume, c4: c4Assume, c5: c5Assume, c6: clause6Assume }}
@@ -1070,7 +1070,7 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
               </span>
             </div>
 
-            <div className="flex items-baseline gap-1.5">
+            <div className="flex items-baseline">
               <input
                 type="number"
                 value={editStr[i] !== undefined ? editStr[i] : (isUnset ? fNum(dispPrice) : fNum(chosen!))}
@@ -1082,15 +1082,15 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
                 className="flex-1 min-w-0 text-right text-2xl font-extrabold bg-transparent border-b-2 border-transparent focus:outline-none focus:border-blue-500 focus:bg-blue-950/20 transition-colors disabled:opacity-40 disabled:cursor-not-allowed [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                 style={{ color: col }}
               />
+            </div>
+
+            <div className="flex items-baseline justify-between gap-1.5 text-xs font-medium" style={{ color: col }}>
+              <span className="min-w-0 truncate">{isUnset ? '' : `累積 ${parseFloat(pctChg) > 0 ? '+' : ''}${pctChg}%`}</span>
               {!isUnset && (
-                <span className="shrink-0 text-xs font-bold leading-tight" style={{ color: dodColor }}>
+                <span className="shrink-0 font-bold leading-tight" style={{ color: dodColor }}>
                   {dodArrow}{fNum(Math.abs(dodAbs))} ({Math.abs(dod).toFixed(2)}%)
                 </span>
               )}
-            </div>
-
-            <div className="text-xs font-medium" style={{ color: col }}>
-              {isUnset ? '' : `累積 ${parseFloat(pctChg) > 0 ? '+' : ''}${pctChg}%`}
             </div>
 
             {i === 0 && (
