@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { evalClauses, summarize, sectorAppliesForPe, SECTOR_PE_LIMIT, type ClauseResult } from '@/lib/clauseEngine'
+import { evalClauses, summarize, pickWatchSummary, sectorAppliesForPe, SECTOR_PE_LIMIT, type ClauseResult } from '@/lib/clauseEngine'
 import AttentionDetailPanel from '@/components/disposal/AttentionDetailPanel'
 
 /* ── Types ─────────────────────────────────────────────────────────────────── */
@@ -1238,29 +1238,12 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
     const chosen0     = simPrices[0]
     const simulated   = chosen0 != null
     const curPrice    = simulated ? chosen0! : prevClose0
-    const { p1, p2, gap } = MARKET_PCT[market]
     const gateVals    = [mAvgEff, sAvgGate].filter((x): x is number => x != null)
     const gate        = gateVals.length ? Math.max(...gateVals) + 20 : null
-    const eff1        = gate != null ? Math.max(p1, gate) : p1
-    const eff2        = gate != null ? Math.max(p2, gate) : p2
-    const cum         = sumKnown + (prevClose0 > 0 ? trunc2((curPrice - prevClose0) / prevClose0 * 100) : 0)
-    const spread      = curPrice - spreadBase0
-    const toNotice    = c1.price - curPrice
     const stockName   = importStatus.stockName
     const mktLabel    = market === 'TWSE' ? '上市' : '上櫃'
-
-    // 「卡在哪一條」：款一①(漲幅) 與 款一②(起迄價差) 擇一顯示——
-    // 取「注意門檻較低（觸發價較低＝最容易先被注意）」的那一條；即使另一條未達，
-    // 仍可能因這條先被注意。與上方答案的注意線一致（c1.std = argmin(①門檻價, ②門檻價)）。
-    const rowC1a = { id: '款一①', desc: '6 日累積漲幅',
-      cur: `${cum > 0 ? '+' : ''}${cum.toFixed(2)}%`, need: `${eff1.toFixed(2)}%`,
-      remain: cum >= eff1 - 1e-9 ? null : `還差 ${(eff1 - cum).toFixed(2)}%`,
-      trig: t1, fired: cum >= eff1 - 1e-9 }
-    const rowC1b = { id: '款一②', desc: `起迄價差（另需累積 ≥ ${eff2.toFixed(0)}%）`,
-      cur: `${fNum(spread)} 元`, need: `${gap} 元`,
-      remain: spread >= gap - 1e-9 ? null : `還差 ${fNum(gap - spread)} 元`,
-      trig: t2, fired: curPrice >= t2 - 1e-9 }
-    const rows = [c1.std === '①' ? rowC1a : rowC1b]
+    const pct         = curPrice > 0 ? (c1.price / curPrice - 1) * 100 : 0   // 款一：只能再漲 %
+    const watch       = pickWatchSummary(evalCard(0, curPrice), maxP)        // 款二~六：最容易觸及者
 
     const distChips: [string, number, number][] = [
       ['①連3日第一款', rules.c1, 3], ['②連5日注意', rules.ca, 5],
@@ -1305,46 +1288,36 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
           <span className="text-gray-400 text-sm">⚠️ 注意線</span>
           <span className={`text-2xl font-extrabold ${c1.feasible ? 'text-red-400' : 'text-gray-500'}`}>{fNum(c1.price)}</span>
           <span className="text-xs text-gray-500">款一{c1.std}</span>
-          {toNotice > 1e-9
-            ? <span className="text-amber-400 text-sm font-semibold">離現價 +{fNum(toNotice)} 元</span>
+          {pct > 1e-9
+            ? <span className="text-amber-400 text-sm font-semibold">只能再漲 +{pct.toFixed(1)}%</span>
             : <span className="text-red-400 text-sm font-semibold">已突破注意線</span>}
           {!c1.feasible && <span className="text-xs text-gray-500">（漲停 {fNum(maxP)} 外，單日拖不到）</span>}
         </div>
 
-        {/* 為什麼是這條注意線：款一①/② 取較低者 + 款二為獨立維度 */}
-        <p className="text-xs text-gray-500 leading-relaxed border-t border-gray-800 pt-3">
-          注意線取
-          <b className="text-gray-300"> 款一①</b>（漲到 {fNum(t1)}，使 6 日累積漲幅達 {eff1.toFixed(0)}%）與
-          <b className="text-gray-300"> 款一②</b>（漲到 {fNum(t2)}，使起迄價差達 {gap} 元且累積≥{eff2.toFixed(0)}%）
-          <b> 兩者較低者</b> → 款一{c1.std} <b className="text-red-300">{fNum(c1.price)}</b> 會先被列注意。
-          <span className="block mt-0.5 text-gray-600">
-            款二是<b className="text-gray-400">另一條獨立</b>的線：30/60/90 日長期漲幅達 100%+ 就可能被注意，<b className="text-gray-400">與今日這 6 日窗口的價格無關</b>。
-          </span>
-        </p>
-
-        {/* 卡在哪一條 */}
-        <div className="space-y-1 border-t border-gray-800 pt-3">
-          <div className="text-xs text-gray-500 mb-1">卡在哪一條（距現價由近到遠）</div>
-          {rows.map((r, idx) => (
-            <div key={r.id} className="flex flex-wrap items-center gap-x-2 text-sm">
-              <span className={`font-semibold w-16 ${r.fired ? 'text-red-400' : 'text-gray-200'}`}>{r.id}</span>
-              <span className="text-gray-400 flex-1 min-w-[8rem]">{r.desc}</span>
-              <span className="font-mono text-gray-300">{r.cur}<span className="text-gray-600"> / {r.need}</span></span>
-              {r.remain
-                ? <span className="text-amber-400 text-xs whitespace-nowrap">{r.remain}</span>
-                : <span className="text-red-400 text-xs whitespace-nowrap">已達</span>}
-              <span className="text-gray-500 text-xs whitespace-nowrap">觸發 ≥ {fNum(r.trig)}</span>
-              {idx === 0 && !r.fired && <span className="text-amber-400 text-xs">◀ 最近</span>}
-            </div>
-          ))}
-          {clause2.triggered && (
-            <div className="flex flex-wrap items-center gap-x-2 text-sm">
-              <span className={`font-semibold w-16 ${clause2.exempt ? 'text-sky-400' : 'text-yellow-400'}`}>款二</span>
-              <span className="text-gray-400 flex-1 min-w-[8rem]">長期起迄倍漲（不同維度）</span>
-              <span className="font-mono text-gray-300">{clause2.window}日 {clause2.pct?.toFixed(1)}%</span>
-              <span className={`text-xs whitespace-nowrap ${clause2.exempt ? 'text-sky-400' : 'text-yellow-400'}`}>{clause2.exempt ? '已豁免' : '可能觸發'}</span>
-              {!clause2.exempt && <span className="text-[11px] text-gray-500 whitespace-nowrap">· 另需當日收紅</span>}
-            </div>
+        {/* 款二~六：只顯示最容易觸及者的缺口；漲停內不可達者隱藏 */}
+        <div className="flex flex-wrap items-baseline gap-x-2 text-sm border-t border-gray-800 pt-3">
+          <span className="text-gray-400 w-16 shrink-0">款二~六</span>
+          {watch ? (
+            <>
+              <span className="font-semibold text-gray-200">款{watch.id}</span>
+              <span className="text-gray-300">{watch.gateText}</span>
+              <span className={
+                watch.badge === 'fired' ? 'text-red-400 text-xs'
+                : watch.badge === 'possible' ? 'text-amber-400 text-xs'
+                : 'text-gray-500 text-xs'}>
+                {watch.badge === 'fired' ? '已觸發' : watch.badge === 'possible' ? '可能觸發' : '距門檻尚遠'}
+              </span>
+              {watch.id === '2' && livePrice != null && quoteMeta?.prevClose != null && (
+                <span className="text-[11px] text-gray-500">
+                  · 盤中 {fNum(livePrice)} {livePrice > quoteMeta.prevClose ? '＞' : '≤'} 昨收 {fNum(quoteMeta.prevClose)} →{' '}
+                  {livePrice > quoteMeta.prevClose
+                    ? <b className="text-yellow-300">目前收紅</b>
+                    : <b className="text-green-300">目前收黑</b>}
+                </span>
+              )}
+            </>
+          ) : (
+            <span className="text-gray-500">今日漲停內皆無法觸及</span>
           )}
         </div>
 
