@@ -291,3 +291,18 @@ export function evalClauses(inp: ClauseInput): ClauseResult[] {
 export function summarize(rs: ClauseResult[]): { first: boolean; any: boolean } {
   return { first: rs.some(r => r.first && r.fired), any: rs.some(r => r.fired) }
 }
+
+const SUMMARY_IDS: ClauseResult['id'][] = ['2', '3', '4', '5', '6']   // 款一另行顯示，排除
+const BADGE_RANK: Record<ClauseResult['badge'], number> = { fired: 2, possible: 1, safe: 0 }
+
+// 款二~六 單行摘要：挑「最容易觸及」者。
+// 可達性：價格型款(priceFloor!=null) 需 priceFloor ≤ 漲停 maxP；量能/比率型(null) 需 badge≠safe。
+// 排序：badge 嚴重度降冪，平手取款號小者。皆不可達回 null。
+export function pickWatchSummary(results: ClauseResult[], maxP: number): ClauseResult | null {
+  const feasible = results.filter(r =>
+    SUMMARY_IDS.includes(r.id) &&
+    (r.priceFloor != null ? r.priceFloor <= maxP + 1e-9 : r.badge !== 'safe'))
+  if (!feasible.length) return null
+  feasible.sort((a, b) => (BADGE_RANK[b.badge] - BADGE_RANK[a.badge]) || a.id.localeCompare(b.id))
+  return feasible[0]
+}

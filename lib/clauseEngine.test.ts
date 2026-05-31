@@ -1,6 +1,6 @@
 // lib/clauseEngine.test.ts
 import { describe, it, expect } from 'vitest'
-import { evalClauses, summarize, sectorAppliesForPe, SECTOR_PE_LIMIT, type ClauseInput, type ClauseResult } from '@/lib/clauseEngine'
+import { evalClauses, summarize, pickWatchSummary, sectorAppliesForPe, SECTOR_PE_LIMIT, type ClauseInput, type ClauseResult } from '@/lib/clauseEngine'
 
 const base: ClauseInput = {
   market: 'TWSE', prevClose: 100, sumKnown: 0, price: 130, spreadBase: 100,
@@ -252,5 +252,33 @@ describe('priceFloor / gateText 欄位', () => {
   it('款二 gateText 固定「當日需收紅」', () => {
     const r = find(evalClauses({ ...base, c2: { window: 60, pct: 140, exempt: false } }), '2')
     expect(r.gateText).toBe('當日需收紅')
+  })
+})
+
+describe('pickWatchSummary 摘要挑選（款二~六）', () => {
+  it('博磊型：款三/四/五 t3 超出漲停、款二 safe、款六 possible → 取款六', () => {
+    const rs = evalClauses({ ...base, price: 130, sharesOutstanding: 1_000_000, pe: 200, pbr: 12, mktPe: 20, mktPbr: 2 })
+    const pick = pickWatchSummary(rs, 120)   // 漲停 120 < t3 125.5 → 款三/四/五 不可達
+    expect(pick?.id).toBe('6')
+  })
+  it('多款可能且 t3≤漲停 → badge 平手取款號小者(款三)', () => {
+    const rs = evalClauses({ ...base, price: 130, avgVol60: 1000, sharesOutstanding: 1_000_000, pe: 200, pbr: 12, mktPe: 20, mktPbr: 2 })
+    expect(pickWatchSummary(rs, 200)?.id).toBe('3')
+  })
+  it('全 safe 但價格可達(t3≤漲停) → 仍取款三、badge safe', () => {
+    const rs = evalClauses({ ...base, price: 120 })  // 120 < t3 125.5 → 款三/四/五 safe
+    const pick = pickWatchSummary(rs, 130)           // 125.5 ≤ 130 可達
+    expect(pick?.id).toBe('3')
+    expect(pick?.badge).toBe('safe')
+  })
+  it('全不可達（t3>漲停、款二/六 safe）→ null', () => {
+    const rs = evalClauses({ ...base, price: 120 })
+    expect(pickWatchSummary(rs, 120)).toBeNull()
+  })
+  it('款一(1①/1②)即使 fired 也不入選（只看款二~六）', () => {
+    const rs = evalClauses({ ...base, price: 133 })  // 款一① fired
+    const pick = pickWatchSummary(rs, 140)
+    expect(['2', '3', '4', '5', '6']).toContain(pick?.id)
+    expect(pick?.id).toBe('3')
   })
 })
