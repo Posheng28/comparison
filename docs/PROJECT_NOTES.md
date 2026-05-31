@@ -177,7 +177,7 @@
 - **注意細節面板表頭徽章改用「可達性」判定**（`components/disposal/AttentionDetailPanel.tsx` `effBadge`）：價格型款（`priceFloor != null`）的表頭燈號改看「門檻價是否 ≤ 計算日漲停價 `maxP`」——可達 →「可能觸發」(橘)、連漲停都摸不到 →「無風險」(綠)；量能/比率型款（款二/六，`priceFloor=null`）才沿用引擎 `badge`。與 heroCard `pickWatchSummary` 同一套可達性邏輯（呼叫點新增 `maxP={getDayBounds(0, simPrices, days).maxP}`）。
   - **修的 bug**：`c1()` 引擎 `badge` 只有 `fired`/`safe`（無 `possible`），價格未達就直接 `safe` → 表頭亮綠「無風險」，但展開的細項列（`priceGroup` status = `met ? 'met' : 'possible'`）卻顯示「可能」→ 表頭與內容自相矛盾（user 回報「都講可能了 上面不要顯示無風險」）。
   - ⚠️ **已知殘留（未處理）**：表頭已可達性化，但**展開後的逐項細條件仍直接吃引擎原始 status**。故若某款門檻價「連漲停都到不了」，表頭正確顯示「無風險」、那一列細項卻可能仍寫「可能」（反向不一致）。要徹底一致需把 `maxP` 也傳進引擎 `priceGroup` 做可達性（會動引擎＋測試，暫緩）。當前 user 案例（國巨款一②門檻 800 ≤ 漲停 ≈812）為可達，不受影響。
-- **六日預測卡四位數價格被遮擋修正**（`components/DisposalTool.tsx`）：價格輸入框獨立成整行（`flex-1 min-w-0`），日漲跌幅移到下方「累積 +X%」那一行右側（`justify-between`），解決四位數股價（≥1000）被日漲跌標籤蓋住（user 回報「四位數字 數字被擋住了」）。
+- **六日預測卡四位數價格被遮擋 → 上下三排堆疊**（`components/DisposalTool.tsx`）：價格輸入框獨立整行（`flex-1 min-w-0`）；「累積 +X%」與「單日漲跌 ▲X (X%)」**各自一整行、上下堆疊**。⚠️ 中間踩雷：先試把日漲跌與累積擠同一行 `justify-between`+`truncate`，結果窄卡片（兩卡並排）下換成「累積%」被切掉（user 二次回報「累積%被擋到」）→ 最終拆成各佔整行才兩邊都不擠。解決四位數股價（≥1000）被蓋 + 累積%被切。
 - 順手移除 `Clause2Result` 未使用的 `sixDayPct` 回傳欄位（仍保留區域變數供 `exempt` 計算）。
 - 已 commit + push（master `469d696`）；`npm run build` 綠、`npx vitest run` 113/113。
 

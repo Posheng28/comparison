@@ -1084,14 +1084,14 @@ export default function DisposalTool({ sidebarOpen, onCloseSidebar }: Props) {
               />
             </div>
 
-            <div className="flex items-baseline justify-between gap-1.5 text-xs font-medium" style={{ color: col }}>
-              <span className="min-w-0 truncate">{isUnset ? '' : `累積 ${parseFloat(pctChg) > 0 ? '+' : ''}${pctChg}%`}</span>
-              {!isUnset && (
-                <span className="shrink-0 font-bold leading-tight" style={{ color: dodColor }}>
-                  {dodArrow}{fNum(Math.abs(dodAbs))} ({Math.abs(dod).toFixed(2)}%)
-                </span>
-              )}
+            <div className="text-xs font-medium" style={{ color: col }}>
+              {isUnset ? '' : `累積 ${parseFloat(pctChg) > 0 ? '+' : ''}${pctChg}%`}
             </div>
+            {!isUnset && (
+              <div className="text-xs font-bold leading-tight" style={{ color: dodColor }}>
+                {dodArrow}{fNum(Math.abs(dodAbs))} ({Math.abs(dod).toFixed(2)}%)
+              </div>
+            )}
 
             {i === 0 && (
               <details className="mt-1 text-xs border-l-2 border-gray-700 pl-2">
